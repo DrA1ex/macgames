@@ -37,6 +37,11 @@ public struct GamePaths: Sendable {
 
     public var frameworks: URL { root.appendingPathComponent("deps/Frameworks") }
     public var engine: URL { root.appendingPathComponent("engine") }
+    /// The engine's own builtin DLLs. Wine searches this folder before every `WINEDLLPATH` entry.
+    public var engineDLLs: URL { engine.appendingPathComponent("lib/wine") }
+    /// DXMT DLLs that would clash with D3DMetal's, kept beside the engine in an environment
+    /// that mixes both renderers (see `GameEnvironment.mixesRenderers`).
+    public var dxmtDLLs: URL { engine.appendingPathComponent("lib/dxmt") }
     public var wine: URL { engine.appendingPathComponent("bin/wine") }
     public var wineserver: URL { engine.appendingPathComponent("bin/wineserver") }
     public var prefix: URL { root.appendingPathComponent("prefix") }

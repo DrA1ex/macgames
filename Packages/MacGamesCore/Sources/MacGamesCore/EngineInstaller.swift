@@ -8,6 +8,9 @@ import Foundation
 public struct EngineInstaller: Sendable {
     public let runtime: RuntimeLayout
     static let markerName = ".macgames-engine"
+    /// In the marker of an engine built for `GameEnvironment.mixesRenderers`, so engines built
+    /// before that layout existed are replaced.
+    static let separateRenderersMarker = "separate-renderers"
 
     public init(runtime: RuntimeLayout) { self.runtime = runtime }
 
@@ -17,7 +20,8 @@ public struct EngineInstaller: Sendable {
         }
         // An engine pack brings the whole engine, so the app's runtime version does not matter.
         let base = paths.environment.enginePack == nil ? try runtime.version() : "pack"
-        return ([base] + paths.environment.engineOverlays + packs).joined(separator: "+")
+        let layout = paths.environment.mixesRenderers ? [Self.separateRenderersMarker] : []
+        return ([base] + paths.environment.engineOverlays + layout + packs).joined(separator: "+")
     }
 
     public func isCurrent(for paths: GamePaths) -> Bool {
@@ -52,10 +56,23 @@ public struct EngineInstaller: Sendable {
         }
         let links = paths.environment.enginePack == nil
             ? try JSONDecoder().decode([String: String].self, from: Data(contentsOf: runtime.dependencyLinks)) : [:]
+        let separate = paths.environment.mixesRenderers
+        let dxmtDLLs = stage.appendingPathComponent("lib/dxmt")
         for (relative, target) in links.sorted(by: { $0.key < $1.key }) {
             let link = stage.appendingPathComponent(relative)
+            let overlayOwnsIt = (try? link.checkResourceIsReachable()) == true || isSymlink(link)
+            if separate, Self.isD3DMetalDLL(target) {
+                // Neither renderer's copy may stay in lib/wine: D3DMetal games load the template's
+                // through WINEDLLPATH, and an overlay's DXMT copy moves to lib/dxmt for DXMT games.
+                if overlayOwnsIt, relative.hasPrefix("lib/wine/") {
+                    let moved = dxmtDLLs.appendingPathComponent(String(relative.dropFirst("lib/wine/".count)))
+                    try fm.createDirectory(at: moved.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try fm.moveItem(at: link, to: moved)
+                }
+                continue
+            }
             // An overlay that ships the file itself owns that path.
-            if (try? link.checkResourceIsReachable()) == true || isSymlink(link) { continue }
+            if overlayOwnsIt { continue }
             try fm.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
             try fm.createSymbolicLink(atPath: link.path, withDestinationPath: paths.frameworks.appendingPathComponent(target).path)
         }
@@ -99,6 +116,11 @@ public struct EngineInstaller: Sendable {
     func overlay(_ name: String, for paths: GamePaths) -> URL? {
         let candidates = [runtime.overlay(name)] + paths.environment.packs.map { paths.pack($0).appendingPathComponent("Overlays/\(name)") }
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    /// A dependency link to one of D3DMetal's Windows DLLs, which share their names with DXMT's.
+    static func isD3DMetalDLL(_ target: String) -> Bool {
+        target.hasPrefix("renderer/d3dmetal/") && target.hasSuffix(".dll")
     }
 
     func isSymlink(_ url: URL) -> Bool {

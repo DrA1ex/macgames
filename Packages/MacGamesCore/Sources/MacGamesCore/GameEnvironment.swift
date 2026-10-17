@@ -50,6 +50,14 @@ public struct GameEnvironment: Sendable, Hashable, Identifiable {
 
     public var games: [GameProfile] { GameProfile.all.filter { $0.environment == id } }
 
+    /// Some games here use D3DMetal and others DXMT. Wine looks for a builtin DLL in the engine's
+    /// own `lib/wine` before any `WINEDLLPATH` entry, so a `dxgi` or `d3d11` there would reach every
+    /// game whatever its renderer. Such an engine keeps neither renderer's copy in `lib/wine`, and
+    /// each game's `WINEDLLPATH` picks the right one.
+    public var mixesRenderers: Bool {
+        games.contains { $0.graphics == .d3dmetal } && games.contains { $0.graphics == .dxmt }
+    }
+
     public static let steam = GameEnvironment(
         id: "steam", title: "Steam", group: "Steam library", launcher: .steam,
         engineOverlays: ["ntdllfix", "cs2", "aomretold", "controllers"], packs: [],

@@ -62,7 +62,7 @@ import Testing
     @Test func cs2UsesDXMTAndNeverTheSidecar() {
         let p = GamePaths(profile: .cs2, root: URL(fileURLWithPath: "/tmp/mg/cs2"))
         let env = WineEnvironment.make(profile: .cs2, paths: p, inherited: [:], optimized: true, hud: false, bridge: bridge)
-        #expect(env["WINEDLLPATH"] == "/tmp/mg/cs2/engine/lib/wine")
+        #expect(env["WINEDLLPATH"] == "/tmp/mg/cs2/engine/lib/dxmt:/tmp/mg/cs2/engine/lib/wine")
         #expect(env["WINEDLLOVERRIDES"] == "winemenubuilder.exe=;mscoree,mshtml=;gameoverlayrenderer,gameoverlayrenderer64=;dxgi,d3d11,d3d10core,d3d12,atidxx64,winemetal=b;nvapi64,nvngx=")
         #expect(env["DXMT_CS2_EARLY_COMPILE"] == "1")
         #expect(env["DXMT_SHADER_CACHE_PATH"] == "/tmp/mg/cs2/games/cs2/graphics/shader-cache")
@@ -72,12 +72,25 @@ import Testing
         #expect(env["AOELAB_SOFTFAULT_GAME"] == nil)
         #expect(env["AOELAB_SIDECAR_PATH"] == nil)
     }
+
+    @Test func dxmtOnlyEnvironmentLoadsDXMTFromTheEngine() {
+        let p = GamePaths(profile: .skyrim, root: URL(fileURLWithPath: "/tmp/mg/skyrim"))
+        let env = WineEnvironment.make(profile: .skyrim, paths: p, inherited: [:], optimized: false, hud: false, bridge: bridge)
+        #expect(env["WINEDLLPATH"] == "/tmp/mg/skyrim/engine/lib/wine")
+    }
+
+    @Test func onlyTheSteamLibraryMixesRenderers() {
+        #expect(GameEnvironment.steam.mixesRenderers)
+        #expect(GameEnvironment.all.filter(\.mixesRenderers).map(\.id) == ["steam"])
+    }
 }
 
 @Suite struct GamePathsTests {
     @Test func aoe4Layout() {
         let p = GamePaths(profile: .aoe4, root: URL(fileURLWithPath: "/r"))
         #expect(p.engine.path == "/r/engine")
+        #expect(p.engineDLLs.path == "/r/engine/lib/wine")
+        #expect(p.dxmtDLLs.path == "/r/engine/lib/dxmt")
         #expect(p.frameworks.path == "/r/deps/Frameworks")
         #expect(p.steamExe.path == "/r/prefix/drive_c/Program Files (x86)/Steam/steam.exe")
         #expect(p.gameExe.path == "/r/prefix/drive_c/Program Files (x86)/Steam/steamapps/common/Age of Empires IV/RelicCardinal.exe")
