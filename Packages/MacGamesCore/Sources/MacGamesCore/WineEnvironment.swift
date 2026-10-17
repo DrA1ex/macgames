@@ -37,13 +37,14 @@ public enum WineEnvironment {
             env["GST_REGISTRY"] = paths.root.appendingPathComponent("gstreamer-registry.bin").path
         }
 
-        let engineDLLs = paths.engine.appendingPathComponent("lib/wine").path
+        let engineDLLs = paths.engineDLLs.path
         switch profile.graphics {
         case .d3dmetal:
             env["WINEDLLPATH"] = "\(paths.d3dmetal.path)/wine:\(engineDLLs)"
             env["WINEDLLOVERRIDES"] = baseOverrides + "dxgi,d3d11,d3d12,atidxx64=n,b;nvapi64,nvngx="
         case .dxmt:
-            env["WINEDLLPATH"] = engineDLLs
+            // Where the engine keeps the clashing DXMT DLLs beside lib/wine, they come first.
+            env["WINEDLLPATH"] = paths.environment.mixesRenderers ? "\(paths.dxmtDLLs.path):\(engineDLLs)" : engineDLLs
             // The shared prefix's system32 holds D3DMetal for other games, so
             // every D3D name is forced to the engine's builtins.
             env["WINEDLLOVERRIDES"] = baseOverrides + "dxgi,d3d11,d3d10core,d3d12,atidxx64,winemetal=b;nvapi64,nvngx="
