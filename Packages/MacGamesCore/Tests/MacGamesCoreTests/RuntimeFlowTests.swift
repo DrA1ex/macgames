@@ -105,13 +105,18 @@ struct FakeEnvironment {
 
     func installSteam() throws { try write("", to: runtime.paths.steamExe) }
 
-    /// Makes the session look alive, with these Windows programs running in it.
-    func live(_ programs: [String] = []) {
+    /// A live session, with these Windows programs running in it.
+    func snapshot(_ programs: [String] = []) -> ProcessSnapshot {
         let engine = runtime.paths.engine.resolvingSymlinksInPath().path
         let server = runtime.paths.wineserver.resolvingSymlinksInPath().path
-        let entries = [ProcessSnapshot.Entry(pid: 1, path: server, argv0: server)]
-            + programs.enumerated().map { .init(pid: Int32($0.offset + 2), path: engine + "/bin/wine-preloader", argv0: #"C:\Games\"# + $0.element) }
-        runtime.processes = { _ in ProcessSnapshot(entries: entries) }
+        return ProcessSnapshot(entries: [ProcessSnapshot.Entry(pid: 1, path: server, argv0: server)]
+            + programs.enumerated().map { .init(pid: Int32($0.offset + 2), path: engine + "/bin/wine-preloader", argv0: #"C:\Games\"# + $0.element) })
+    }
+
+    /// Makes the session look alive, with these Windows programs running in it.
+    func live(_ programs: [String] = []) {
+        let live = snapshot(programs)
+        runtime.processes = { _ in live }
     }
 
     func cleanUp() { try? FileManager.default.removeItem(at: dir) }
