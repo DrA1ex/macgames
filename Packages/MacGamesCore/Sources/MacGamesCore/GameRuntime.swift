@@ -21,6 +21,12 @@ public final class GameRuntime: @unchecked Sendable {
     /// How long a started launcher gets before an early exit counts as a failure.
     var startupGrace: TimeInterval = 2
     var steamStartTimeout: TimeInterval = 90
+    /// How long Steam gets, after Play, to start the game's own process.
+    var gameStartTimeout: TimeInterval = 120
+    /// How long the Wine session may be missing during that wait before it counts as closed.
+    var sessionGoneGrace: TimeInterval = 5
+    /// How often that wait looks at the processes.
+    var gameStartPoll: TimeInterval = 1
     /// The main display's size in points, where a fullscreen game opens; tests replace it.
     var mainDisplay: @Sendable () -> OverwatchDisplay.Size? = { OverwatchDisplay.mainDisplay() }
     /// The displays as a new Wine session takes them in; tests replace it.
@@ -609,6 +615,33 @@ extension GameRuntime {
             Thread.sleep(forTimeInterval: 1)
         }
         progress("Steam is taking long to start; starting the game anyway.")
+    }
+
+    /// After Play, Steam needs half a minute or more to start a game. Waits until the game's
+    /// own process runs, so the game shows as starting rather than ready until then.
+    public func waitForGameStart() throws {
+        guard profile.launch == .steam else { return }
+        progress("Waiting for Steam to start \(profile.title)…")
+        let deadline = Date().addingTimeInterval(gameStartTimeout)
+        var sessionMissingSince: Date?
+        while true {
+            let live = processes(paths.engine)
+            if state(using: live) == .running { return }
+            if isSessionRunning(using: live) {
+                sessionMissingSince = nil
+            } else if let since = sessionMissingSince {
+                if Date().timeIntervalSince(since) >= sessionGoneGrace {
+                    throw SetupError("Steam closed before \(profile.title) started. Logs: \(paths.logs.path)")
+                }
+            } else {
+                sessionMissingSince = Date()
+            }
+            guard Date() < deadline else {
+                throw SetupError("\(profile.title) has not started after \(Int(gameStartTimeout)) seconds. "
+                    + "Look at the Steam window: Steam may be updating the game or waiting for an answer.")
+            }
+            Thread.sleep(forTimeInterval: gameStartPoll)
+        }
     }
 
     func launchDirect() throws {

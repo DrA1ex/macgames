@@ -111,7 +111,7 @@ final class GameModel: Identifiable {
         case .installing: openSteam()
         case .ready:
             let context = LaunchContext.mainDisplay()
-            perform("Starting \(profile.title)") { r in try r.play(context) }
+            perform("Starting \(profile.title)") { r in try r.play(context); try r.waitForGameStart() }
         case .running: confirmingStop = true
         }
     }

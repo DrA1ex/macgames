@@ -41,6 +41,7 @@ enum CLI {
                 try game.openForInstall()
             case "play":
                 try game.play(LaunchContext.mainDisplay())
+                try game.waitForGameStart()
             case "stop":
                 try game.stop()
             case "uninstall":
