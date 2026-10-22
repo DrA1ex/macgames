@@ -2,6 +2,15 @@
 
 All notable changes to MacGames are listed here.
 
+## 0.1.2 - 2026-10-22
+
+- Age of Empires IV starts again. The Steam library's engine carried DXMT's `dxgi` and `d3d11` in place
+  of D3DMetal's, so the game crashed while it looked for graphics adapters. A Steam library setup
+  rebuilds its engine on the next launch, with nothing to do on your side. Thanks to @bgarciaoliveira
+- After Play, a Steam game shows as starting until the game itself runs, instead of going back to Play
+  while Steam brings it up. MacGames says so when Steam closes first, or when the game has not started
+  after 2 minutes
+
 ## 0.1.1 - 2026-10-05
 
 - Overwatch runs on the Wine and DXMT of [Recall](https://github.com/AsherJN/recall) 1.1.0 (Apache 2.0),
