@@ -27,7 +27,7 @@ The core logic has its own test suite, which needs neither Xcode's UI nor the ru
 
 ```sh
 cd Packages/MacGamesCore
-swift test
+swift test --no-parallel
 ```
 
 Please run it before you open a pull request. Every change to `MacGamesCore` comes with a test.
