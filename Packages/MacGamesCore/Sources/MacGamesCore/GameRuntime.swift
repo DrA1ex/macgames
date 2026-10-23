@@ -71,7 +71,13 @@ public final class GameRuntime: @unchecked Sendable {
                 throw SetupError("The \(helper.lastPathComponent) helper is missing at \(helper.path).")
             }
         }
-        return environment(optimized: optimized, hud: s.hud)
+        var env = environment(optimized: optimized, hud: s.hud)
+        if optimized, profile.id == "aoe4",
+           (try? String(contentsOf: runtime.resources.appendingPathComponent("aoe-performance-v2"), encoding: .utf8)
+               .trimmingCharacters(in: .whitespacesAndNewlines)) == "2" {
+            env["MACGAMES_AOE_COMBINED"] = "1"
+        }
+        return env
     }
 
     /// The game's stage; pass one `snapshot` to answer many games from a single process scan.
