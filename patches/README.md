@@ -48,3 +48,9 @@ The working combination was exercised in a locally installed AoE IV save on an M
 Later testing at a matching 3840x2160 window size found installed MacGames at 24.91 ms GPU / 39.70 FPS and the control with extra diagnostics disabled at 24.88 ms / 39.34 FPS. Extra instrumentation had confounded earlier comparisons. Performance runs should keep actual render dimensions and scene state equal and omit diagnostic counters, HUD logging, GPU capture and encoder profiling.
 
 The Steam integration is covered by argument/environment/fallback and launcher-session tests; the full modified Steam end-to-end game path has not yet been manually tested. No game files, personal saves/logs, proprietary D3DMetal binaries, native resolve-skipping experiments or unsupported renderer replacements are included in this change.
+
+## Fork-only additions
+
+The main branch additionally contains an original selected-EXE workflow, per-profile local prefixes, an optional working folder, generic cooperative x87 entry, and opt-in profiling/recording tools. These adapt existing MacGames/Wine/x87sidecar interfaces; they are not borrowed FEX patches and are excluded from the upstream proposal.
+
+The two original Wine research patches live in `wine/experimental/`, along with test probes and their applicability/validation limits. They apply to the pinned runtime4 Wine source but are not part of default runtime embedding. Their base source archive SHA-256 is `7be5819017b34f09670293f2be7ed9f4476734b8f42dab121a8b74e6619c92a8`.
