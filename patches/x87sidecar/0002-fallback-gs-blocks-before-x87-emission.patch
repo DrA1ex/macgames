@@ -1,3 +1,8 @@
+# Original changes to x87sidecar; provided under its MIT license.
+# Baseline: https://github.com/tarikbc/macgames/releases/tag/runtime-4
+# Translator origin: https://github.com/athei/x87sidecar
+# sidecar-source.tar.gz SHA-256: 50ad26b802a590b7c49a121da35ca632bc2676b2fcde40b663805e612d547ff0
+
 --- a/rosetta_loader/src/sidecar.cpp
 +++ b/rosetta_loader/src/sidecar.cpp
 @@ -2453,6 +2453,28 @@
