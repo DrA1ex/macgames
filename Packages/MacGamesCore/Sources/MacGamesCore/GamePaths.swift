@@ -10,8 +10,11 @@ public struct GamePaths: Sendable {
     public let profile: GameProfile
     public let root: URL
 
-    public init(profile: GameProfile, root: URL) {
+    public let localLaunch: Bool
+
+    public init(profile: GameProfile, root: URL, localLaunch: Bool = false) {
         self.profile = profile
+        self.localLaunch = localLaunch
         self.root = root.standardizedFileURL
     }
 
@@ -55,7 +58,7 @@ public struct GamePaths: Sendable {
     public var steamExe: URL { steamDir.appendingPathComponent("steam.exe") }
     public var steamapps: URL { steamDir.appendingPathComponent("steamapps") }
     public var appManifest: URL { steamapps.appendingPathComponent("appmanifest_\(profile.steamAppID).acf") }
-    public var environment: GameEnvironment { profile.gameEnvironment }
+    public var environment: GameEnvironment { localLaunch ? .local(for: profile) : profile.gameEnvironment }
     /// Downloaded packs of this environment, one folder each.
     public var packs: URL { root.appendingPathComponent("packs") }
     public func pack(_ name: String) -> URL { packs.appendingPathComponent(name) }
@@ -69,18 +72,28 @@ public struct GamePaths: Sendable {
 
     /// The game's install folder: under Steam's library, or under Program Files for Battle.net.
     public var installDir: URL {
-        profile.launch == .battleNet
+        if localLaunch, let selection = LocalGameSelection.load(from: self) { return selection.installDirectory(for: profile) }
+        return profile.launch == .battleNet
             ? prefix.appendingPathComponent("drive_c/Program Files (x86)/\(profile.installFolder)")
             : steamapps.appendingPathComponent("common/\(profile.installFolder)")
     }
 
-    public var gameExe: URL { installDir.appendingPathComponent(profile.executableRelativePath) }
+    public var gameExe: URL {
+        if localLaunch, let exe = LocalGameSelection.load(from: self)?.executable { return exe }
+        return installDir.appendingPathComponent(profile.executableRelativePath)
+    }
+
+    /// Parent prefix settings and caches stay independent of where the EXE is installed.
+    public var workingDirectory: URL {
+        LocalGameSelection.load(from: self)?.workingDirectory ?? gameExe.deletingLastPathComponent()
+    }
+    public var localLog: URL { logs.appendingPathComponent("\(profile.id)-local.log") }
 
     /// The `C:` path of a file inside `drive_c`.
     public func windowsPath(_ url: URL) -> String {
         let drive = prefix.appendingPathComponent("drive_c").standardizedFileURL.path
         let path = url.standardizedFileURL.path
-        guard path.hasPrefix(drive) else { return path }
+        guard path.hasPrefix(drive + "/") else { return path }
         return "C:" + path.dropFirst(drive.count).replacingOccurrences(of: "/", with: "\\")
     }
 }

@@ -4,10 +4,10 @@ import Testing
 
 @Suite struct HiDPITests {
     @Test func olderSettingsAdoptExistingRetinaModeAndKeepAnExplicitChoice() throws {
-        let fixture = try FakeEnvironment(.aoe4)
+        let fixture = try FakeEnvironment(.aoe4, localLaunch: true)
         defer { fixture.cleanUp() }
         let paths = fixture.runtime.paths
-        try write(#"{"optimized":true,"hud":true}"#, to: LaunchSettings.url(paths))
+        try write(#"{"optimized":true,"hud":true,"aoePerformance":true}"#, to: LaunchSettings.url(paths))
         try write(#"""
         WINE REGISTRY Version 2
         [Software\\Wine\\Mac Driver] 123
@@ -16,7 +16,7 @@ import Testing
         """#, to: paths.prefix.appendingPathComponent("user.reg"))
         var settings = LaunchSettings.load(from: paths)
         #expect(settings.hiDPI == true)
-        #expect(settings.optimized && settings.hud)
+        #expect(settings.optimized && settings.hud && settings.aoePerformance == true)
         settings.hiDPI = false
         try settings.save(to: paths)
         #expect(LaunchSettings.load(from: paths).hiDPI == false, "the saved switch overrides the previous registry value")
@@ -24,7 +24,7 @@ import Testing
     }
 
     @Test func toggleChangesReachAnAlreadyConfiguredPrefixInBothDirections() throws {
-        let fixture = try FakeEnvironment(.aoe4)
+        let fixture = try FakeEnvironment(.aoe4, localLaunch: true)
         defer { fixture.cleanUp() }
         let game = fixture.runtime
         let env = game.environment(optimized: false, hud: false)
@@ -46,10 +46,10 @@ import Testing
     }
 
     @Test func defaultsRemainCompatibleAndUserCanOverrideAnExistingGameRecipe() throws {
-        let plain = try FakeEnvironment(.aoe4)
+        let plain = try FakeEnvironment(.aoe4, localLaunch: true)
         defer { plain.cleanUp() }
         #expect(plain.runtime.settings.hiDPI == false)
-        let retinaGame = try FakeEnvironment(.overwatch)
+        let retinaGame = try FakeEnvironment(.overwatch, localLaunch: true)
         defer { retinaGame.cleanUp() }
         #expect(retinaGame.runtime.settings.hiDPI == true)
         let values = GameRecipes.registry(for: retinaGame.runtime.paths.environment, hiDPI: false)

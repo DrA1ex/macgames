@@ -21,6 +21,7 @@ struct FakeEnvironment {
     }
 
 
+
     final class EventLog: @unchecked Sendable {
         private let lock = NSLock()
         private var lines: [String] = []
@@ -68,7 +69,7 @@ struct FakeEnvironment {
     exit 0
     """#
 
-    init(_ profile: GameProfile) throws {
+    init(_ profile: GameProfile, localLaunch: Bool = false) throws {
         dir = try makeTempDir("flow")
         let res = dir.appendingPathComponent("Runtime")
         try write(Self.wine, to: res.appendingPathComponent("Engine/bin/wine"))
@@ -83,7 +84,7 @@ struct FakeEnvironment {
         try write("test", to: res.appendingPathComponent("VERSION"))
         let log = events
         runtime = GameRuntime(profile: profile, root: dir.appendingPathComponent("root"),
-                              runtime: RuntimeLayout(resources: res, helpers: dir.appendingPathComponent("Helpers")),
+                              runtime: RuntimeLayout(resources: res, helpers: dir.appendingPathComponent("Helpers")), localLaunch: localLaunch,
                               downloadCache: dir.appendingPathComponent("downloads"),
                               events: { if case .progress(let line) = $0 { log.add(line) } })
         // Packs count as installed, so no test downloads one.
@@ -111,7 +112,7 @@ struct FakeEnvironment {
         runtime.displaySignature = { "test displays" }
         try FileManager.default.createDirectory(at: runtime.paths.prefix.appendingPathComponent("drive_c"), withIntermediateDirectories: true)
         try write("runtime-v1", to: runtime.paths.runtimeReady)
-        try write(profile.environment, to: runtime.paths.root.appendingPathComponent("macgames-environment"))
+        try write(runtime.paths.environment.id, to: runtime.paths.root.appendingPathComponent("macgames-environment"))
     }
 
     func installSteam() throws { try write("", to: runtime.paths.steamExe) }

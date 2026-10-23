@@ -54,7 +54,7 @@ extension GameRuntime {
     func startWatchers(_ watchers: [WindowsHelper.Launch]) throws {
         let available = watchers.filter { fm.fileExists(atPath: helper($0.name).path) }
         guard !available.isEmpty else { return }
-        try ensureSteamSession()
+        if !paths.localLaunch { try ensureSteamSession() }
         let env = try launchEnvironment()
         // A watcher is a help, not a requirement: one that fails is reported and the game starts anyway.
         for watcher in available {

@@ -13,6 +13,11 @@ public enum GameState: String, Sendable, Equatable {
     public static func derive(_ paths: GamePaths, sessionRunning: Bool, gameProcessRunning: Bool = false) -> GameState {
         let fm = FileManager.default
         guard fm.fileExists(atPath: paths.runtimeReady.path) else { return .notSetUp }
+        if paths.localLaunch {
+            if gameProcessRunning { return .running }
+            guard let selection = LocalGameSelection.load(from: paths), (try? selection.validate()) != nil else { return .needsGame }
+            return .ready
+        }
         if paths.profile.launch == .battleNet {
             // `.needsSteam` stands for the environment's launcher client.
             guard fm.fileExists(atPath: paths.battleNetExe.path) else { return .needsSteam }
@@ -33,19 +38,22 @@ public struct LaunchSettings: Codable, Sendable, Equatable {
     public var optimized: Bool
     /// Show the Metal performance HUD.
     public var hud: Bool
-    /// Wine Retina rendering; old settings adopt the existing prefix value.
+    /// Opt-in fixed-build AoE exception/cache extensions; nil preserves older settings.
+    public var aoePerformance: Bool?
+    /// Use Wine's Retina rendering mode; older settings adopt the existing prefix value.
     public var hiDPI: Bool?
 
-    public init(optimized: Bool = true, hud: Bool = false, hiDPI: Bool? = nil) {
+    public init(optimized: Bool = true, hud: Bool = false, aoePerformance: Bool? = nil, hiDPI: Bool? = nil) {
         self.optimized = optimized
         self.hud = hud
+        self.aoePerformance = aoePerformance
         self.hiDPI = hiDPI
     }
 
     static func url(_ paths: GamePaths) -> URL { paths.gameData.appendingPathComponent("settings.json") }
 
     public static func load(from paths: GamePaths) -> LaunchSettings {
-        var settings = (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings()
+        var settings = (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings(optimized: !paths.localLaunch)
         if settings.hiDPI == nil {
             settings.hiDPI = WineHiDPI.currentValue(in: paths.prefix) ?? paths.environment.games.contains {
                 GameRecipes.registry(for: $0).contains(WineHiDPI.registryValue(true))

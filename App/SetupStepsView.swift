@@ -11,7 +11,7 @@ struct SetupStepsView: View {
         VStack(alignment: .leading, spacing: Space.m) {
             Text("Setup").font(.system(size: 15, weight: .semibold))
             VStack(alignment: .leading, spacing: Space.m) {
-                ForEach(Array(SetupStep.allCases.enumerated()), id: \.element) { index, step in
+                ForEach(Array(SetupStep.allCases.filter { !game.localLaunch || $0 < .steam }.enumerated()), id: \.element) { index, step in
                     StepRow(step: step, status: status(of: step), accent: game.profile.accent)
                         .opacity(appeared ? 1 : 0)
                         .offset(x: appeared || reduceMotion ? 0 : -12)

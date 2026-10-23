@@ -77,7 +77,11 @@ public struct ProcessSnapshot: Sendable {
         public let path: String
         /// Wine keeps the Windows program's path here.
         public let argv0: String?
-        public init(pid: Int32, path: String, argv0: String?) { self.pid = pid; self.path = path; self.argv0 = argv0 }
+        /// Wine can run a temporary copy of its loader outside the engine directory.
+        public let winePrefix: String?
+        public init(pid: Int32, path: String, argv0: String?, winePrefix: String? = nil) {
+            self.pid = pid; self.path = path; self.argv0 = argv0; self.winePrefix = winePrefix
+        }
     }
 
     public let entries: [Entry]
@@ -85,14 +89,29 @@ public struct ProcessSnapshot: Sendable {
 
     /// The processes whose binary is inside `folder`, such as the MacGames data folder.
     public static func take(under folder: URL) -> ProcessSnapshot {
-        ProcessSnapshot(entries: LiveProcesses.pids(under: folder).compactMap { pid in
-            LiveProcesses.path(pid).map { Entry(pid: pid, path: $0.path, argv0: LiveProcesses.firstArgument(pid)) }
+        let directory = folder.resolvingSymlinksInPath()
+        let prefix = directory.path + "/"
+        let enginePrefix = directory.lastPathComponent == "engine"
+            ? directory.deletingLastPathComponent().appendingPathComponent("prefix").path : nil
+        return ProcessSnapshot(entries: LiveProcesses.allPids().compactMap { pid in
+            guard let binary = LiveProcesses.path(pid) else { return nil }
+            if binary.path.hasPrefix(prefix) {
+                return Entry(pid: pid, path: binary.path, argv0: LiveProcesses.firstArgument(pid))
+            }
+            // Inspect only Wine loaders/helpers, not the environment of unrelated programs.
+            guard ["wine", "wine64", "wine-preloader", "wine64-preloader", "x87sidecar"].contains(binary.lastPathComponent),
+                  let info = LiveProcesses.launchInfo(pid), let winePrefix = info.winePrefix else { return nil }
+            let resolved = URL(fileURLWithPath: winePrefix).resolvingSymlinksInPath().path
+            guard resolved.hasPrefix(prefix) || resolved == enginePrefix else { return nil }
+            return Entry(pid: pid, path: binary.path, argv0: info.argv0, winePrefix: resolved)
         })
     }
 
     func inside(_ folder: URL) -> [Entry] {
         let prefix = folder.resolvingSymlinksInPath().path + "/"
-        return entries.filter { $0.path.hasPrefix(prefix) }
+        let winePrefix = folder.lastPathComponent == "engine"
+            ? folder.deletingLastPathComponent().appendingPathComponent("prefix").resolvingSymlinksInPath().path : nil
+        return entries.filter { $0.path.hasPrefix(prefix) || (winePrefix != nil && $0.winePrefix == winePrefix) }
     }
 
     /// Executable paths of the processes whose binary is inside `folder`.
@@ -116,19 +135,46 @@ public enum LiveProcesses {
         ProcessSnapshot.take(under: folder).isRunning(executable: executable, under: folder)
     }
 
-    static func firstArgument(_ pid: Int32) -> String? {
+    static func firstArgument(_ pid: Int32) -> String? { launchInfo(pid)?.argv0 }
+
+    static func launchInfo(_ pid: Int32) -> (argv0: String?, winePrefix: String?)? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var size = 0
         guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
         var buffer = [UInt8](repeating: 0, count: size)
         guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return nil }
-        // Layout: argc, the executable path, padding NULs, then argv[0].
-        var i = MemoryLayout<Int32>.size
-        while i < size, buffer[i] != 0 { i += 1 }
-        while i < size, buffer[i] == 0 { i += 1 }
-        var j = i
-        while j < size, buffer[j] != 0 { j += 1 }
-        return i < j ? String(decoding: buffer[i..<j], as: UTF8.self) : nil
+        return parseLaunchInfo(Array(buffer.prefix(size)))
+    }
+
+    /// KERN_PROCARGS2: argc, executable path, NUL padding, argv, environment.
+    /// Retains only argv[0] and WINEPREFIX; no other environment values are stored.
+    static func parseLaunchInfo(_ buffer: [UInt8]) -> (argv0: String?, winePrefix: String?)? {
+        guard buffer.count > 4 else { return nil }
+        let argc = buffer.prefix(4).enumerated().reduce(0) { $0 | Int($1.element) << ($1.offset * 8) }
+        guard argc > 0, argc < buffer.count else { return nil }
+        var i = 4
+        func string() -> String {
+            let start = i
+            while i < buffer.count, buffer[i] != 0 { i += 1 }
+            let value = String(decoding: buffer[start..<i], as: UTF8.self)
+            if i < buffer.count { i += 1 }
+            return value
+        }
+        _ = string() // Executable path.
+        while i < buffer.count, buffer[i] == 0 { i += 1 }
+        var argv0: String?
+        for index in 0..<argc {
+            guard i < buffer.count else { return nil }
+            let argument = string()
+            if index == 0 { argv0 = argument }
+        }
+        while i < buffer.count {
+            let variable = string()
+            if variable.hasPrefix("WINEPREFIX=") {
+                return (argv0, String(variable.dropFirst("WINEPREFIX=".count)))
+            }
+        }
+        return (argv0, nil)
     }
 
     /// Executable paths of live processes whose binary is inside `folder`.
@@ -144,11 +190,15 @@ public enum LiveProcesses {
             .resolvingSymlinksInPath()
     }
 
-    static func pids(under folder: URL) -> [Int32] {
+    static func allPids() -> [Int32] {
         var pids = [Int32](repeating: 0, count: 8192)
         let count = pids.withUnsafeMutableBytes { proc_listallpids($0.baseAddress, Int32($0.count)) }
         guard count > 0 else { return [] }
+        return Array(pids.prefix(Int(min(count, Int32(pids.count)))).filter { $0 > 0 })
+    }
+
+    static func pids(under folder: URL) -> [Int32] {
         let prefix = folder.resolvingSymlinksInPath().path + "/"
-        return pids.prefix(Int(min(count, Int32(pids.count)))).filter { $0 > 0 && (path($0)?.path.hasPrefix(prefix) ?? false) }
+        return allPids().filter { path($0)?.path.hasPrefix(prefix) ?? false }
     }
 }

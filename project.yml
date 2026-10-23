@@ -53,7 +53,8 @@ targets:
         embed: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tarikbc.macgames
+        PRODUCT_BUNDLE_IDENTIFIER: com.dra1ex.macgames.local
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) LOCAL_BUILD"
         PRODUCT_NAME: MacGames
         ENABLE_APP_SANDBOX: NO
         GENERATE_INFOPLIST_FILE: NO
