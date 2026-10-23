@@ -12,12 +12,13 @@ You do not need to write code to help: a good bug report or a test on a differen
 
 ## Get set up
 
-You need an Apple Silicon Mac with macOS 26 or later, Xcode 27 and XcodeGen.
+You need an Apple Silicon Mac with macOS 26 or later, Xcode 27, XcodeGen and CMake.
 
 ```sh
 git clone https://github.com/tarikbc/macgames.git
 cd macgames
 scripts/fetch-runtime.sh   # once: downloads the runtime into Vendor/
+# CMake builds the patched AoE sidecar during runtime embedding (brew install cmake).
 xcodegen generate
 open MacGames.xcodeproj
 ```

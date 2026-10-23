@@ -33,16 +33,25 @@ public struct LaunchSettings: Codable, Sendable, Equatable {
     public var optimized: Bool
     /// Show the Metal performance HUD.
     public var hud: Bool
+    /// Wine Retina rendering; old settings adopt the existing prefix value.
+    public var hiDPI: Bool?
 
-    public init(optimized: Bool = true, hud: Bool = false) {
+    public init(optimized: Bool = true, hud: Bool = false, hiDPI: Bool? = nil) {
         self.optimized = optimized
         self.hud = hud
+        self.hiDPI = hiDPI
     }
 
     static func url(_ paths: GamePaths) -> URL { paths.gameData.appendingPathComponent("settings.json") }
 
     public static func load(from paths: GamePaths) -> LaunchSettings {
-        (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings()
+        var settings = (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings()
+        if settings.hiDPI == nil {
+            settings.hiDPI = WineHiDPI.currentValue(in: paths.prefix) ?? paths.environment.games.contains {
+                GameRecipes.registry(for: $0).contains(WineHiDPI.registryValue(true))
+            }
+        }
+        return settings
     }
 
     public func save(to paths: GamePaths) throws {

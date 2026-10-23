@@ -77,6 +77,9 @@ public final class GameRuntime: @unchecked Sendable {
                .trimmingCharacters(in: .whitespacesAndNewlines)) == "2" {
             env["MACGAMES_AOE_COMBINED"] = "1"
         }
+        // Included in Steam's managed fingerprint so a changed display mode
+        // restarts the session before the registry recipe is applied.
+        env["MACGAMES_HIDPI"] = s.hiDPI == true ? "1" : "0"
         return env
     }
 
@@ -272,9 +275,10 @@ public final class GameRuntime: @unchecked Sendable {
     func ensureRecipes(environment env: [String: String]) throws {
         ensureSandbox()
         let marker = paths.root.appendingPathComponent("recipes-applied")
-        let wanted = GameRecipes.recipeHash(for: paths.environment, root: paths.root)
+        let hiDPI = settings.hiDPI
+        let wanted = GameRecipes.recipeHash(for: paths.environment, root: paths.root, hiDPI: hiDPI)
         guard (try? String(contentsOf: marker, encoding: .utf8)) != wanted else { return }
-        let registry = paths.environment.games.flatMap(GameRecipes.registry(for:))
+        let registry = GameRecipes.registry(for: paths.environment, hiDPI: hiDPI)
         if !registry.isEmpty { try importRegistry(registry, environment: env) }
         try wanted.write(to: marker, atomically: true, encoding: .utf8)
     }
@@ -300,8 +304,9 @@ public final class GameRuntime: @unchecked Sendable {
         }
         let wasRunning = isSessionRunning()
         if !wasRunning { try ensureEngine() }
+        // HOME/TMPDIR can be per-game even when joining an existing Steam.
+        ensureSandbox()
         let env = try launchEnvironment()
-        try ensureRecipes(environment: environment(optimized: false, hud: false))
         let fingerprint = SteamLaunch.fingerprint(env)
         var running = wasRunning
         let matches = SteamSession.load(paths)?.fingerprint == fingerprint
@@ -314,6 +319,11 @@ public final class GameRuntime: @unchecked Sendable {
             try stop()
             running = false
         }
+
+        // Opening an existing client must not silently change its display mode.
+        // Play/background already restart a changed session above, after checking
+        // that no game would be interrupted.
+        if !running { try ensureRecipes(environment: environment(optimized: false, hud: false)) }
 
         let log = paths.logs.appendingPathComponent("steam-session.log")
         try fm.createDirectory(at: paths.logs, withIntermediateDirectories: true)
@@ -505,6 +515,17 @@ extension GameRuntime {
         progress("The Battle.net installer is open. Sign in when it finishes, then install the game there.")
     }
 
+    var sessionHiDPI: URL { paths.root.appendingPathComponent("session-hidpi") }
+
+    func hiDPISessionChanged() -> Bool {
+        let recorded = (try? String(contentsOf: sessionHiDPI, encoding: .utf8)).map { $0 == "1" }
+        let recipeDefault = paths.environment.games.contains {
+            GameRecipes.registry(for: $0).contains(WineHiDPI.registryValue(true))
+        }
+        let previous = recorded ?? WineHiDPI.currentValue(in: paths.prefix) ?? recipeDefault
+        return previous != (settings.hiDPI == true)
+    }
+
     /// Opens Battle.net. With `play`, Battle.net also starts the game, for games with a product code.
     public func openBattleNet(play: Bool = false) throws {
         guard fm.fileExists(atPath: paths.battleNetExe.path) else { try installBattleNet(); return }
@@ -514,6 +535,14 @@ extension GameRuntime {
         let live = processes(paths.engine)
         var clientRunning = live.isRunning(executable: "Battle.net.exe", under: paths.engine)
         let gameRunning = live.isRunning(executable: profile.executableName, under: paths.engine)
+        if isSessionRunning(using: live), hiDPISessionChanged() {
+            if let playing = runningGameTitle() {
+                throw SetupError("Close \(playing) first. Battle.net must restart to apply HiDPI.")
+            }
+            progress("Restarting Battle.net to apply HiDPI…")
+            try stop()
+            clientRunning = false
+        }
         if profile.id == "overwatch", !gameRunning, isSessionRunning(using: live), displaysChanged(clientRunning: clientRunning) {
             // Wine keeps the displays its session started with; a game started in an older one
             // may find no usable display. Battle.net's update agent can keep that session alive.
@@ -541,6 +570,7 @@ extension GameRuntime {
             try prepareOverwatch()
         }
         try startDetached(client, environment: try launchEnvironment(), workingDirectory: folder, log: "battlenet-session.log")
+        try (settings.hiDPI == true ? "1" : "0").write(to: sessionHiDPI, atomically: true, encoding: .utf8)
         if profile.id == "overwatch", let displays = displaySignature() {
             try? Data(displays.utf8).write(to: sessionDisplays, options: .atomic)
         }
