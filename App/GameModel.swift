@@ -22,12 +22,17 @@ final class EnvironmentSettingsStore {
         environments[paths.root] = model
         return model
     }
+
+    func reload() async {
+        for model in Array(environments.values) { await model.reload() }
+    }
 }
 
 /// One observable preference for every card sharing an environment.
 @MainActor @Observable
 final class EnvironmentSettingsModel {
     private let paths: GamePaths
+    @ObservationIgnored private var revision = 0
     private(set) var value: EnvironmentSettings
 
     init(paths: GamePaths) {
@@ -38,11 +43,15 @@ final class EnvironmentSettingsModel {
     func setHiDPI(_ enabled: Bool) throws {
         let updated = EnvironmentSettings(hiDPI: enabled)
         try updated.save(to: paths)
+        revision += 1
         value = updated
     }
 
-    func reload() {
-        let saved = EnvironmentSettings.load(from: paths)
+    func reload() async {
+        let paths = self.paths, revision = self.revision
+        let saved = await Task.detached(priority: .utility) { EnvironmentSettings.load(from: paths) }.value
+        // A toggle made while the read was in flight takes precedence.
+        guard revision == self.revision else { return }
         if saved != value { value = saved }
     }
 }
@@ -156,7 +165,6 @@ final class GameModel: Identifiable {
         }
         self.localExecutable = r.localExecutable
         self.workingDirectory = r.paths.workingDirectory
-        environmentSettings.reload()
         self.onlineReady = online
         self.canRemoveSetup = removable
         // An old error no longer describes a game that moved to another stage.
@@ -306,6 +314,7 @@ final class LibraryModel {
 
     func poll() async {
         while !Task.isCancelled {
+            if gate.owner == nil { await environments.reload() }
             let snapshot = await Task.detached { ProcessSnapshot.take(under: GamePaths.dataFolder()) }.value
             for game in games { await game.refresh(snapshot) }
             try? await Task.sleep(for: .seconds(3))
