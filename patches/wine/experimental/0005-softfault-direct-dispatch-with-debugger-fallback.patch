@@ -1,0 +1,104 @@
+--- a/dlls/ntdll/signal_x86_64.c
++++ b/dlls/ntdll/signal_x86_64.c
+@@ -180,30 +180,56 @@
+  memcpy(&mask,xs+512,8);if(mask&4)memcpy(avx,xs+576,256);else memset(avx,0,256);
+  RtlSetExtendedFeaturesMask(ex,7);
+  rec.ExceptionCode=EXCEPTION_ILLEGAL_INSTRUCTION;rec.ExceptionAddress=(void *)c->Rip;
+- status=NtRaiseException(&rec,c,TRUE);RtlRaiseStatus(status);
++ /* Match RtlRaiseException's existing debugger guard: without a debugger,
++  * enter Wine's normal VEH/SEH dispatcher directly. This avoids a Unix
++  * transition and recopying the already complete exception context into a
++  * new KiUserExceptionDispatcher frame. NtContinue remains responsible for
++  * restoring XSTATE. With a debugger keep native first-chance delivery.
++  */
++ if (!NtCurrentTeb()->Peb->BeingDebugged) status=dispatch_exception(&rec,c);
++ else status=NtRaiseException(&rec,c,TRUE);
++ RtlRaiseStatus(status);
+ }
+ 
+ __ASM_GLOBAL_FUNC( __wine_aoe_softfault1,
+                    "pushfq\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %rax\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %rcx\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %rdx\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %rbx\n\t"
++                   __ASM_SEH(".seh_pushreg %rbx\n\t")
+                    "push %rbp\n\t"
++                   __ASM_SEH(".seh_pushreg %rbp\n\t")
+                    "push %rsi\n\t"
++                   __ASM_SEH(".seh_pushreg %rsi\n\t")
+                    "push %rdi\n\t"
++                   __ASM_SEH(".seh_pushreg %rdi\n\t")
+                    "push %r8\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %r9\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %r10\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %r11\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %r12\n\t"
++                   __ASM_SEH(".seh_pushreg %r12\n\t")
+                    "push %r13\n\t"
++                   __ASM_SEH(".seh_pushreg %r13\n\t")
+                    "push %r14\n\t"
++                   __ASM_SEH(".seh_pushreg %r14\n\t")
+                    "push %r15\n\t"
++                   __ASM_SEH(".seh_pushreg %r15\n\t")
+                    "mov %rsp,%r12\n\t"
++                   __ASM_SEH(".seh_setframe %r12,0\n\t")
+                    "cld\n\t"
+                    "sub $0x400,%rsp\n\t"
+                    "and $-64,%rsp\n\t"
++                   __ASM_SEH(".seh_endprologue\n\t")
+                    "mov $7,%eax\n\t"
+                    "xor %edx,%edx\n\t"
+                    "xsave64 64(%rsp)\n\t"
+@@ -214,25 +240,43 @@
+                    "ud2" );
+ __ASM_GLOBAL_FUNC( __wine_aoe_softfault2,
+                    "pushfq\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %rax\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %rcx\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %rdx\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %rbx\n\t"
++                   __ASM_SEH(".seh_pushreg %rbx\n\t")
+                    "push %rbp\n\t"
++                   __ASM_SEH(".seh_pushreg %rbp\n\t")
+                    "push %rsi\n\t"
++                   __ASM_SEH(".seh_pushreg %rsi\n\t")
+                    "push %rdi\n\t"
++                   __ASM_SEH(".seh_pushreg %rdi\n\t")
+                    "push %r8\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %r9\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %r10\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %r11\n\t"
++                   __ASM_SEH(".seh_stackalloc 8\n\t")
+                    "push %r12\n\t"
++                   __ASM_SEH(".seh_pushreg %r12\n\t")
+                    "push %r13\n\t"
++                   __ASM_SEH(".seh_pushreg %r13\n\t")
+                    "push %r14\n\t"
++                   __ASM_SEH(".seh_pushreg %r14\n\t")
+                    "push %r15\n\t"
++                   __ASM_SEH(".seh_pushreg %r15\n\t")
+                    "mov %rsp,%r12\n\t"
++                   __ASM_SEH(".seh_setframe %r12,0\n\t")
+                    "cld\n\t"
+                    "sub $0x400,%rsp\n\t"
+                    "and $-64,%rsp\n\t"
++                   __ASM_SEH(".seh_endprologue\n\t")
+                    "mov $7,%eax\n\t"
+                    "xor %edx,%edx\n\t"
+                    "xsave64 64(%rsp)\n\t"
