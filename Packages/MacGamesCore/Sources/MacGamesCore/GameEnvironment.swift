@@ -9,7 +9,6 @@ public struct GameEnvironment: Sendable, Hashable, Identifiable {
     public enum Launcher: Sendable, Hashable {
         case steam
         case battleNet
-        case none
     }
 
     /// Graphics libraries copied into the prefix during setup, in order.
@@ -49,37 +48,15 @@ public struct GameEnvironment: Sendable, Hashable, Identifiable {
     /// Downloads the Sikarugir template for the engine's libraries and D3DMetal.
     public var usesTemplate: Bool { enginePack == nil }
 
-    public var localGameID: String? = nil
-    public var separatesRenderers: Bool = false
-
-    public var games: [GameProfile] {
-        if let localGameID { return GameProfile.named(localGameID).map { [$0] } ?? [] }
-        return GameProfile.all.filter { $0.environment == id }
-    }
+    public var games: [GameProfile] { GameProfile.all.filter { $0.environment == id } }
 
     /// Some games here use D3DMetal and others DXMT. Wine looks for a builtin DLL in the engine's
     /// own `lib/wine` before any `WINEDLLPATH` entry, so a `dxgi` or `d3d11` there would reach every
     /// game whatever its renderer. Such an engine keeps neither renderer's copy in `lib/wine`, and
     /// each game's `WINEDLLPATH` picks the right one.
     public var mixesRenderers: Bool {
-        // Keep the Steam engine's renderer separation: its CS2 overlay also ships DXMT DLLs.
-        if separatesRenderers { return true }
-        return games.contains { $0.graphics == .d3dmetal } && games.contains { $0.graphics == .dxmt }
+        games.contains { $0.graphics == .d3dmetal } && games.contains { $0.graphics == .dxmt }
     }
-
-    /// A separate prefix for an external installation, using the catalog's engine and recipes.
-    /// Keep the original environment intact for the legacy launcher API.
-    public static func local(for profile: GameProfile) -> GameEnvironment {
-        let base = profile.gameEnvironment
-        return GameEnvironment(
-            id: "\(profile.id)-local", title: profile.title, group: "My Games", launcher: .none,
-            engineOverlays: base.engineOverlays, packs: base.packs, prefixDLLs: base.prefixDLLs,
-            // External installations and engine configs need Wine's normal Unix path mapping.
-            rootDrives: [], d3dmetalPack: base.d3dmetalPack, sdlControllers: base.sdlControllers,
-            enginePack: base.enginePack, localGameID: profile.id, separatesRenderers: base.mixesRenderers)
-    }
-
-    public static var aoe4Local: GameEnvironment { local(for: .aoe4) }
 
     public static let steam = GameEnvironment(
         id: "steam", title: "Steam", group: "Steam library", launcher: .steam,

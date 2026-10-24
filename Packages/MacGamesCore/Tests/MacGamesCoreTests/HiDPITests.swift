@@ -16,7 +16,7 @@ import Testing
         """#, to: paths.prefix.appendingPathComponent("user.reg"))
         #expect(fixture.runtime.environmentSettings.hiDPI)
         let settings = LaunchSettings.load(from: paths)
-        #expect(settings.optimized && settings.hud && settings.aoePerformance == true)
+        #expect(settings.optimized && settings.hud)
         try EnvironmentSettings(hiDPI: false).save(to: paths)
         #expect(!fixture.runtime.environmentSettings.hiDPI)
         #expect(fixture.calls.isEmpty, "reading or saving preferences must not start Wine")

@@ -38,19 +38,18 @@ public struct LaunchSettings: Codable, Sendable, Equatable {
     public var optimized: Bool
     /// Show the Metal performance HUD.
     public var hud: Bool
-    /// Opt-in fixed-build AoE exception/cache extensions; nil preserves older settings.
-    public var aoePerformance: Bool?
 
-    public init(optimized: Bool = true, hud: Bool = false, aoePerformance: Bool? = nil) {
+    public init(optimized: Bool = true, hud: Bool = false) {
         self.optimized = optimized
         self.hud = hud
-        self.aoePerformance = aoePerformance
     }
 
     static func url(_ paths: GamePaths) -> URL { paths.gameData.appendingPathComponent("settings.json") }
 
     public static func load(from paths: GamePaths) -> LaunchSettings {
-        (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings(optimized: !paths.localLaunch)
+        let data = (try? Data(contentsOf: url(paths))) ?? (paths.localLaunch
+            ? try? Data(contentsOf: paths.legacyLocalGameData.appendingPathComponent("settings.json")) : nil)
+        return data.flatMap { try? JSONDecoder().decode(Self.self, from: $0) } ?? LaunchSettings(optimized: !paths.localLaunch)
     }
 
     public func save(to paths: GamePaths) throws {

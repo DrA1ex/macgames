@@ -69,7 +69,7 @@ struct GameDetailView: View {
         .confirmationDialog("Stop \(game.profile.title)?", isPresented: $game.confirmingStop) {
             Button(game.localLaunch ? "Stop the game" : "Stop the game and Steam", role: .destructive, action: game.stop)
         } message: {
-            Text(game.localLaunch ? "The local Windows session closes. Progress since your last save is lost." : "The game and Steam close at once. Progress since your last save is lost.")
+            Text(game.localLaunch ? "The shared \(game.runtime.paths.environment.title) Windows session closes. Progress since your last save is lost." : "The game and Steam close at once. Progress since your last save is lost.")
         }
         .confirmationDialog(removalTitle, isPresented: removalShown, presenting: game.removal) { removal in
             switch removal {
@@ -269,10 +269,7 @@ private struct SettingsSection: View {
                 if game.profile.optimizedExecutableSHA256 != nil {
                     Divider().opacity(0.3)
                     row("Rosetta optimization", detail: "Accelerates x87 math; the supported AoE IV build also uses faster exception handling and translated-code reuse. " + game.optimization.detail) {
-                        Toggle("Rosetta optimization", isOn: Binding(get: { game.settings.optimized }, set: {
-                            game.settings.optimized = $0
-                            if game.profile.id == "aoe4" { game.settings.aoePerformance = $0 }
-                        })).labelsHidden().toggleStyle(.switch)
+                        Toggle("Rosetta optimization", isOn: $game.settings.optimized).labelsHidden().toggleStyle(.switch)
                     }
                 }
                 if game.profile.graphics == .dxmt {
@@ -355,10 +352,10 @@ private struct LocalExecutableSection: View {
                 Button("Choose EXE…", action: game.chooseExecutable)
                     .disabled(game.locked || game.sessionRunning)
                 if game.sessionRunning && game.state != .running {
-                    Button("Stop local session", action: game.stop).disabled(game.locked)
+                    Button("Stop shared session", action: game.requestStop).disabled(game.locked)
                 }
             }
-            Text("Uses your installed game files. Steam is not installed or started.")
+            Text("Uses your installed files in the shared \(game.runtime.paths.environment.title) environment. Steam is not installed or started.")
                 .font(.system(size: 11)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

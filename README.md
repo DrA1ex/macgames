@@ -4,9 +4,9 @@
 
 ## What this fork adds
 
-- **Choose an installed EXE and play.** The local app uses the selected game files in place, with an isolated Wine environment for each profile. It does not install or start Steam/Battle.net in this UI. A custom working folder is optional.
+- **Choose an installed EXE and play.** The local app uses the selected game files in place, with the same shared environment groups as upstream. It does not install or start Steam/Battle.net in this UI. A custom working folder is optional.
 - **Rosetta optimization.** One switch covers x87 translation and, for the exact supported AoE IV executable, software-fault handling and translated-code reuse. Three source patches compose the decoders and fix GS/TLS and FBLD save-load failures. Different executable builds retain the existing guards and fallback behavior.
-- **HiDPI (Retina).** A saved per-game switch exposes Wine's RetinaMode on scaled displays. Both on and off work, the existing manual preference is adopted on upgrade, and Windows UI DPI is left alone. Changes apply at the next game launch.
+- **HiDPI (Retina).** One saved preference per environment exposes Wine's RetinaMode on scaled displays. All cards in a group show the same value. Both on and off work, existing preferences are adopted on upgrade, and Windows UI DPI is left alone. Changes apply at the next game launch.
 - **Opt-in diagnostics.** CLI profiling and performance recordings are separate from ordinary Play. Performance comparisons should omit extra counters, HUD logging, encoder tracking and GPU capture.
 - **Reproducible helper build.** The patched x87sidecar is built from hash-pinned sources. Vendored/installed Wine Mach-O binaries are not rewritten by this build.
 
@@ -32,7 +32,9 @@ open "build/MacGames Local.app"
 
 The first command that fetches the runtime downloads upstream runtime4 and checks its SHA-256. The sidecar build applies `patches/x87sidecar/0001` through `0003` to the source archive and retains corresponding patched sources. CMake can be installed with `brew install cmake` if absent. The local app has upstream automatic updates disabled so an upstream release cannot silently replace the fork.
 
-In the app, choose the matching profile, choose its installed EXE, then Play. Settings include **Rosetta optimization**, **HiDPI (Retina)** and the optional performance HUD. Profiles, settings and logs live under `~/Library/Application Support/macgames/<game-id>-local/`; game files stay in their chosen folder. See [LOCAL-AOE4.md](LOCAL-AOE4.md) for the local workflow and CLI.
+In the app, choose the matching profile, choose its installed EXE, then Play. Settings include **Rosetta optimization**, **HiDPI (Retina)** and the optional performance HUD. Environment groups match upstream: most games share `~/Library/Application Support/macgames/steam/`, while Skyrim, Overwatch and other special groups keep their own environments. Per-game selections, settings and caches stay under `games/<game-id>/`; game files stay in their chosen folder. See [LOCAL-AOE4.md](LOCAL-AOE4.md) for the local workflow and CLI.
+
+Previous `<game-id>-local` bottles are retained for rollback. On first direct launch, missing game settings and user files are copied into the shared environment. Existing files are kept, conflicts are reported, and registry/engine files are not merged. The source baseline is tagged `local-before-shared-environments-2026-10-24`.
 
 The release workflow signs the rebuilt sidecar with the release Developer ID and hardened runtime. Local builds keep their ad-hoc signatures.
 
@@ -52,8 +54,8 @@ Each working sidecar patch has its own commit. Integration, HiDPI, local-launch 
 
 ## Validation
 
-- Upstream-compatible branch: **280 tests / 73 suites**, plus full Xcode/Steam/Sparkle app build.
-- Fork main: **303 tests / 79 suites**, plus the complete local app and source-patched helper build.
+- Upstream-compatible branch: **285 tests / 73 suites**, plus full Xcode/Steam/Sparkle app build.
+- Fork main: **312 tests / 80 suites**, plus the complete local app and source-patched helper build.
 - Game observations: an M5 Pro / macOS 26.5.2 local AoE IV save improved from an initial user-reported 20-25 FPS to 55-58 FPS after the working combination and crash fixes. These are single-machine observations, not a controlled cross-platform benchmark or a promise.
 - Matched 3840x2160 windowed comparison: installed app **24.91 ms GPU / 39.70 FPS**; control without extra diagnostics **24.88 ms / 39.34 FPS**. Extra instrumentation had confounded earlier comparisons. Actual render size and scene state must match.
 

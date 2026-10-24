@@ -4,7 +4,7 @@ import Foundation
 import MacGamesCore
 import Observation
 
-/// Serializes setup and launch operations while every local game owns its prefix.
+/// Serializes setup and launch operations in shared Windows environments.
 @MainActor @Observable
 final class OperationGate {
     /// The game whose task is running, if any.
@@ -54,7 +54,7 @@ final class GameModel: Identifiable {
     let runtime: GameRuntime
     let environmentSettings: EnvironmentSettingsModel
     private(set) var state: GameState = .notSetUp
-    /// This game’s isolated Wine session is alive.
+    /// The shared Windows environment is alive.
     private(set) var sessionRunning = false
     private(set) var sidecarRunning = false
     /// The game's community online client is installed.
@@ -103,7 +103,7 @@ final class GameModel: Identifiable {
         case .notSetUp: return "Choose the installed game’s EXE. The first Play prepares its Windows environment."
         case .needsGame: return "The selected EXE is missing or unreadable. Choose it again."
         case .ready: return "Ready to launch the selected EXE without Steam."
-        case .running: return "The game is running in its own Windows environment."
+        case .running: return "The game is running in the \(runtime.paths.environment.title) environment."
         default: return "Choose the installed game's EXE."
         }
     }
@@ -211,7 +211,7 @@ final class GameModel: Identifiable {
     }
 
     func requestStop() {
-        if state == .running { confirmingStop = true } else { stop() }
+        if state == .running || (localLaunch && sessionRunning) { confirmingStop = true } else { stop() }
     }
 
     func stop() { perform("Stopping") { r in try r.stop() } }
@@ -289,9 +289,11 @@ final class LibraryModel {
     }
 
     var selected: GameModel? { games.first { $0.id == selectedID } }
-    /// Every game uses the same choose-EXE workflow.
+    /// Match upstream's environment groups while keeping direct EXE launches.
     var sections: [(title: String, games: [GameModel])] {
-        [(title: "My Games", games: games)]
+        GameEnvironment.groups.map { group in
+            (group.title, group.games.compactMap { profile in games.first { $0.id == profile.id } })
+        }.filter { !$0.games.isEmpty }
     }
 
     /// Games in sidebar order, for ⌘1…⌘9.

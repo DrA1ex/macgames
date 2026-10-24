@@ -49,10 +49,12 @@ import Testing
         #expect(stripped.contains("AOELAB_COUNTERS_DIR"))
     }
 
-    @Test func oldSettingsDoNotEnableAddressExtensions() throws {
+    @Test func oneOptimizationPreferenceReadsLegacySettings() throws {
         let settings = try JSONDecoder().decode(LaunchSettings.self, from: Data(#"{"optimized":true,"hud":true}"#.utf8))
-        #expect(settings.aoePerformance == nil)
-        let updated = LaunchSettings(optimized: true, hud: true, aoePerformance: true)
+        #expect(settings.optimized)
+        let legacy = try JSONDecoder().decode(LaunchSettings.self, from: Data(#"{"optimized":true,"hud":true,"aoePerformance":false}"#.utf8))
+        #expect(legacy == settings, "the old second preference no longer overrides the combined switch")
+        let updated = LaunchSettings(optimized: true, hud: true)
         #expect(try JSONDecoder().decode(LaunchSettings.self, from: JSONEncoder().encode(updated)) == updated)
     }
 
@@ -64,8 +66,8 @@ import Testing
             try write("#!/bin/sh\nexit 0\n", to: path)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path.path)
         }
-        game.settings = LaunchSettings(optimized: true, aoePerformance: true)
-        #expect(throws: SetupError.self) { try game.launchEnvironment() }
+        game.settings = LaunchSettings(optimized: true)
+        #expect(try game.launchEnvironment()["MACGAMES_X87_MODE"] == "generic", "an older helper retains generic x87")
         try write("2\n", to: game.runtime.resources.appendingPathComponent("aoe-performance-v2"))
         let env = try game.launchEnvironment()
         #expect(env["MACGAMES_X87_MODE"] == "aoe-performance")

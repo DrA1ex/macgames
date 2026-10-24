@@ -41,7 +41,7 @@ public final class GameRuntime: @unchecked Sendable {
                 events: @escaping @Sendable (RuntimeEvent) -> Void = { _ in }) {
         self.profile = profile
         let local = localLaunch
-        self.paths = GamePaths(profile: profile, root: root ?? GamePaths.defaultRoot(for: local ? .local(for: profile) : profile.gameEnvironment),
+        self.paths = GamePaths(profile: profile, root: root ?? GamePaths.defaultRoot(for: profile.gameEnvironment),
                                localLaunch: local)
         self.runtime = runtime
         self.downloader = Downloader(cache: downloadCache)
@@ -80,12 +80,10 @@ public final class GameRuntime: @unchecked Sendable {
             }
         }
         var env = environment(optimized: optimized, hud: s.hud)
-        if s.aoePerformance == true, profile.id == "aoe4",
+        let composed = (try? String(contentsOf: runtime.resources.appendingPathComponent("aoe-performance-v2"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)) == "2"
+        if optimized, composed, profile.id == "aoe4",
            env["MACGAMES_X87_MODE"] == "generic", let pin = profile.optimizedExecutableSHA256 {
-            let marker = runtime.resources.appendingPathComponent("aoe-performance-v2")
-            guard (try? String(contentsOf: marker, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)) == "2" else {
-                throw SetupError("This MacGames build has no compatible AoE performance helper. Turn off Faster exception handling or install the patched build.")
-            }
             // Direct cooperative launch avoids aoe_reexec_sidecar, whose legacy
             // path sets X87_ALWAYS_NONE. Bridge verifies the actual EXE first.
             env["MACGAMES_X87_MODE"] = "aoe-performance"
@@ -97,9 +95,7 @@ public final class GameRuntime: @unchecked Sendable {
             env["AOE_SOFTFAULT_TARGET1"] = "0x180000000"
             env["AOE_SOFTFAULT_TARGET"] = "0x180000010"
         }
-        if optimized, profile.id == "aoe4", (!paths.localLaunch || s.aoePerformance == true),
-           (try? String(contentsOf: runtime.resources.appendingPathComponent("aoe-performance-v2"), encoding: .utf8)
-               .trimmingCharacters(in: .whitespacesAndNewlines)) == "2" {
+        if optimized, composed, profile.id == "aoe4" {
             env["MACGAMES_AOE_COMBINED"] = "1"
         }
         env["MACGAMES_HIDPI"] = environmentSettings.hiDPI ? "1" : "0"
@@ -295,8 +291,9 @@ public final class GameRuntime: @unchecked Sendable {
         let live = processes(paths.engine)
         for game in paths.environment.games {
             let gamePaths = GamePaths(profile: game, root: paths.root, localLaunch: paths.localLaunch)
-            if GameRecipes.processNames(for: game).contains(where: { live.isRunning(executable: $0, under: paths.engine) })
-                || (isSessionRunning(using: live) && GameProcessLog.isRunning(game, paths: gamePaths)) {
+            let names = Set(GameRecipes.processNames(for: game) + (paths.localLaunch ? [gamePaths.gameExe.lastPathComponent] : []))
+            if names.contains(where: { live.isRunning(executable: $0, under: paths.engine) })
+                || (!paths.localLaunch && isSessionRunning(using: live) && GameProcessLog.isRunning(game, paths: gamePaths)) {
                 return game.title
             }
         }

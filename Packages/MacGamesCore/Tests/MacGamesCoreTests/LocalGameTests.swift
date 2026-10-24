@@ -122,12 +122,12 @@ import BridgeKit
         #expect(!env.keys.contains { $0.hasPrefix("AOELAB_") || $0.hasPrefix("X87_") || $0.hasPrefix("Steam") })
     }
 
-    @Test func localRootIsSeparateAndTheSteamCatalogIsUnchanged() {
+    @Test func directAndSteamLaunchesUseTheSameCatalogEnvironment() {
         let layout = RuntimeLayout(resources: URL(fileURLWithPath: "/runtime"), helpers: URL(fileURLWithPath: "/helpers"))
         let local = GameRuntime(profile: .aoe4, runtime: layout, localLaunch: true)
         let steam = GameRuntime(profile: .aoe4, runtime: layout)
-        #expect(local.paths.root != steam.paths.root)
-        #expect(local.paths.root.lastPathComponent == "aoe4-local")
+        #expect(local.paths.root == steam.paths.root)
+        #expect(local.paths.root.lastPathComponent == "steam")
         #expect(steam.paths.environment == .steam)
         #expect(GameProfile.aoe4.launch == .steam)
         #expect(GameEnvironment.steam.games.contains(.aoe4))
@@ -170,15 +170,15 @@ import BridgeKit
 
 @Suite struct GenericLocalLibraryTests {
     @Test(arguments: GameProfile.all)
-    func everyCatalogGameHasItsOwnLocalEnvironment(_ profile: GameProfile) throws {
+    func everyDirectGameUsesItsUpstreamEnvironment(_ profile: GameProfile) throws {
         let fixture = try FakeEnvironment(profile, localLaunch: true); defer { fixture.cleanUp() }
         let game = fixture.runtime
         let file = fixture.dir.appendingPathComponent("external/\(profile.executableRelativePath)")
         try write("MZ external game", to: file)
         try game.selectLocalExecutable(file)
         #expect(game.state() == .ready)
-        #expect(game.paths.environment.launcher == .none)
-        #expect(game.paths.environment.games == [profile])
+        #expect(game.paths.environment == profile.gameEnvironment)
+        #expect(game.paths.environment.games.contains(profile))
         #expect(game.paths.environment.engineOverlays == profile.gameEnvironment.engineOverlays)
         #expect(game.paths.environment.packs == profile.gameEnvironment.packs)
         #expect(game.paths.environment.enginePack == profile.gameEnvironment.enginePack)

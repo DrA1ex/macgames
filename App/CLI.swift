@@ -7,7 +7,7 @@ import MacGamesCore
 enum CLI {
     static let usage = """
     usage: MacGames --command <check|setup|launcher|install|play|record-performance|stop|uninstall|remove-setup|status|reset-display|settings>
-                    --game <id> [--root <data root>] [--optimized on|off] [--hud on|off] [--hidpi on|off] [--aoe-performance on|off] [--local-exe /path/to/game.exe | --local] [--profile /diagnostic/folder]
+                    --game <id> [--root <data root>] [--optimized on|off] [--hud on|off] [--hidpi on|off] [--local-exe /path/to/game.exe | --local] [--profile /diagnostic/folder]
     games: \(GameProfile.all.map(\.id).joined(separator: ", "))
     """
 
@@ -31,6 +31,9 @@ enum CLI {
         if let folder = value("--profile", in: args) { game.diagnosticDirectory = URL(fileURLWithPath: folder) }
         do {
             if let exe = value("--local-exe", in: args) { try game.selectLocalExecutable(URL(fileURLWithPath: exe)) }
+            if value("--aoe-performance", in: args) != nil {
+                throw SetupError("Use --optimized on|off; one setting now controls x87 and the supported AoE exception/cache path.")
+            }
             switch command {
             case "check":
                 let report = try game.check()
@@ -63,15 +66,11 @@ enum CLI {
                 print("The next launch applies the window size again.")
             case "settings":
                 var s = game.settings
-                if let v = value("--optimized", in: args) {
-                    s.optimized = v == "on"
-                    if profile.id == "aoe4" { s.aoePerformance = s.optimized }
-                }
+                if let v = value("--optimized", in: args) { s.optimized = v == "on" }
                 if let v = value("--hud", in: args) { s.hud = v == "on" }
                 if let v = value("--hidpi", in: args) { try EnvironmentSettings(hiDPI: v == "on").save(to: game.paths) }
-                if let v = value("--aoe-performance", in: args) { s.aoePerformance = v == "on" }
                 game.settings = s
-                print("optimized: \(s.optimized), hud: \(s.hud), hiDPI: \(game.environmentSettings.hiDPI), aoePerformance: \(s.aoePerformance == true)")
+                print("optimized: \(s.optimized), hud: \(s.hud), hiDPI: \(game.environmentSettings.hiDPI)")
             default:
                 FileHandle.standardError.write(Data((usage + "\n").utf8))
                 return 64

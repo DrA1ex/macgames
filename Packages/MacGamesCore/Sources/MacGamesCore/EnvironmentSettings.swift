@@ -17,9 +17,16 @@ public struct EnvironmentSettings: Codable, Sendable, Equatable {
         // on which game's card happens to open first.
         struct Legacy: Decodable { let hiDPI: Bool? }
         let choices = Set(paths.environment.games.compactMap { profile -> Bool? in
-            let game = GamePaths(profile: profile, root: paths.root)
-            guard let data = try? Data(contentsOf: LaunchSettings.url(game)) else { return nil }
-            return (try? JSONDecoder().decode(Legacy.self, from: data))?.hiDPI
+            let game = GamePaths(profile: profile, root: paths.root, localLaunch: paths.localLaunch)
+            let candidates = [LaunchSettings.url(game)] + (paths.localLaunch ? [
+                game.legacyLocalRoot.appendingPathComponent("environment-settings.json"),
+                game.legacyLocalGameData.appendingPathComponent("settings.json")
+            ] : [])
+            for file in candidates {
+                if let data = try? Data(contentsOf: file),
+                   let value = try? JSONDecoder().decode(Legacy.self, from: data), let hiDPI = value.hiDPI { return hiDPI }
+            }
+            return nil
         })
         if choices.count == 1, let choice = choices.first { return Self(hiDPI: choice) }
         let fallback = paths.environment.games.contains {

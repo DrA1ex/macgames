@@ -58,7 +58,7 @@ public struct GamePaths: Sendable {
     public var steamExe: URL { steamDir.appendingPathComponent("steam.exe") }
     public var steamapps: URL { steamDir.appendingPathComponent("steamapps") }
     public var appManifest: URL { steamapps.appendingPathComponent("appmanifest_\(profile.steamAppID).acf") }
-    public var environment: GameEnvironment { localLaunch ? .local(for: profile) : profile.gameEnvironment }
+    public var environment: GameEnvironment { profile.gameEnvironment }
     /// Downloaded packs of this environment, one folder each.
     public var packs: URL { root.appendingPathComponent("packs") }
     public func pack(_ name: String) -> URL { packs.appendingPathComponent(name) }
@@ -87,6 +87,12 @@ public struct GamePaths: Sendable {
     public var workingDirectory: URL {
         LocalGameSelection.load(from: self)?.workingDirectory ?? gameExe.deletingLastPathComponent()
     }
+    /// Previous isolated local environment, retained for migration and rollback.
+    var legacyLocalRoot: URL {
+        root.deletingLastPathComponent().appendingPathComponent("\(profile.id)-local")
+    }
+    var legacyLocalGameData: URL { legacyLocalRoot.appendingPathComponent("games/\(profile.id)") }
+
     public var localLog: URL { logs.appendingPathComponent("\(profile.id)-local.log") }
 
     /// The `C:` path of a file inside `drive_c`.

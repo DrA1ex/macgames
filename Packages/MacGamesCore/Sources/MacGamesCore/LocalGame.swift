@@ -42,7 +42,9 @@ public struct LocalGameSelection: Codable, Sendable, Equatable {
     }
 
     public static func load(from paths: GamePaths) -> LocalGameSelection? {
-        try? JSONDecoder().decode(Self.self, from: Data(contentsOf: url(paths)))
+        let data = (try? Data(contentsOf: url(paths))) ?? (paths.localLaunch
+            ? try? Data(contentsOf: paths.legacyLocalGameData.appendingPathComponent("local-game.json")) : nil)
+        return data.flatMap { try? JSONDecoder().decode(Self.self, from: $0) }
     }
 
     static func url(_ paths: GamePaths) -> URL { paths.gameData.appendingPathComponent("local-game.json") }
@@ -89,6 +91,17 @@ extension GameRuntime {
         }
         try selection.validate()
         guard state() != .running else { throw SetupError("\(profile.title) is already running.") }
+        if let playing = runningGameTitle() {
+            throw SetupError("Close \(playing) first. It shares the \(paths.environment.title) Windows environment.")
+        }
+        let legacyEngine = paths.legacyLocalRoot.appendingPathComponent("engine")
+        if paths.legacyLocalRoot != paths.root, !processes(legacyEngine).paths(under: legacyEngine).isEmpty {
+            throw SetupError("Close the previous \(profile.title) local session before importing its saved data.")
+        }
+        // Preserve the requested mode before a first registry import changes
+        // the prefix's RetinaMode. Old per-game bottles remain untouched.
+        try EnvironmentSettings.load(from: paths).save(to: paths)
+        for warning in try LocalEnvironmentMigration.migrate(paths) { progress(warning) }
         if !fm.fileExists(atPath: paths.runtimeReady.path) { try prepare() }
         // A fresh Wine session must pick up this launch's sync and optimization settings.
         if isSessionRunning() { try stop() }
