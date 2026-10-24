@@ -33,28 +33,23 @@ public struct LaunchSettings: Codable, Sendable, Equatable {
     public var optimized: Bool
     /// Show the Metal performance HUD.
     public var hud: Bool
-    /// Wine Retina rendering; old settings adopt the existing prefix value.
-    public var hiDPI: Bool?
 
-    public init(optimized: Bool = true, hud: Bool = false, hiDPI: Bool? = nil) {
+    public init(optimized: Bool = true, hud: Bool = false) {
         self.optimized = optimized
         self.hud = hud
-        self.hiDPI = hiDPI
     }
 
     static func url(_ paths: GamePaths) -> URL { paths.gameData.appendingPathComponent("settings.json") }
 
     public static func load(from paths: GamePaths) -> LaunchSettings {
-        var settings = (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings()
-        if settings.hiDPI == nil {
-            settings.hiDPI = WineHiDPI.currentValue(in: paths.prefix) ?? paths.environment.games.contains {
-                GameRecipes.registry(for: $0).contains(WineHiDPI.registryValue(true))
-            }
-        }
-        return settings
+        (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings()
     }
 
     public func save(to paths: GamePaths) throws {
+        // Freeze migration before rewriting a legacy per-game HiDPI choice.
+        if !FileManager.default.fileExists(atPath: EnvironmentSettings.url(paths).path) {
+            try EnvironmentSettings.load(from: paths).save(to: paths)
+        }
         try FileManager.default.createDirectory(at: paths.gameData, withIntermediateDirectories: true)
         try JSONEncoder().encode(self).write(to: Self.url(paths), options: .atomic)
     }
