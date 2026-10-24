@@ -58,9 +58,9 @@ enum CLI {
                 var s = game.settings
                 if let v = value("--optimized", in: args) { s.optimized = v == "on" }
                 if let v = value("--hud", in: args) { s.hud = v == "on" }
-                if let v = value("--hidpi", in: args) { s.hiDPI = v == "on" }
+                if let v = value("--hidpi", in: args) { try EnvironmentSettings(hiDPI: v == "on").save(to: game.paths) }
                 game.settings = s
-                print("optimized: \(s.optimized), hud: \(s.hud), hiDPI: \(s.hiDPI == true)")
+                print("optimized: \(s.optimized), hud: \(s.hud), hiDPI: \(game.environmentSettings.hiDPI)")
             default:
                 FileHandle.standardError.write(Data((usage + "\n").utf8))
                 return 64

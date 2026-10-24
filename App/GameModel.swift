@@ -11,11 +11,48 @@ final class OperationGate {
     var owner: String?
 }
 
+/// Shares a settings model only between cards using the same prefix.
+@MainActor
+final class EnvironmentSettingsStore {
+    private var environments: [URL: EnvironmentSettingsModel] = [:]
+
+    func settings(for paths: GamePaths) -> EnvironmentSettingsModel {
+        if let model = environments[paths.root] { return model }
+        let model = EnvironmentSettingsModel(paths: paths)
+        environments[paths.root] = model
+        return model
+    }
+}
+
+/// One observable preference for every card sharing an environment.
+@MainActor @Observable
+final class EnvironmentSettingsModel {
+    private let paths: GamePaths
+    private(set) var value: EnvironmentSettings
+
+    init(paths: GamePaths) {
+        self.paths = paths
+        self.value = EnvironmentSettings.load(from: paths)
+    }
+
+    func setHiDPI(_ enabled: Bool) throws {
+        let updated = EnvironmentSettings(hiDPI: enabled)
+        try updated.save(to: paths)
+        value = updated
+    }
+
+    func reload() {
+        let saved = EnvironmentSettings.load(from: paths)
+        if saved != value { value = saved }
+    }
+}
+
 /// UI state for one game. Every blocking runtime call runs off the main actor.
 @MainActor @Observable
 final class GameModel: Identifiable {
     let profile: GameProfile
     let runtime: GameRuntime
+    let environmentSettings: EnvironmentSettingsModel
     private(set) var state: GameState = .notSetUp
     /// The shared Wine session (Steam and any game) is alive.
     private(set) var sessionRunning = false
@@ -45,17 +82,26 @@ final class GameModel: Identifiable {
     /// What the next launch does with the x87 optimization.
     private(set) var optimization: OptimizationStatus = .notApplicable
 
+    var hiDPI: Bool {
+        get { environmentSettings.value.hiDPI }
+        set {
+            do { try environmentSettings.setHiDPI(newValue) }
+            catch { self.error = String(describing: error) }
+        }
+    }
+
     nonisolated var id: String { profile.id }
 
     var steamAvailable: Bool { state != .notSetUp && state != .needsSteam }
     var showsSetupSteps: Bool { step != nil || state == .notSetUp || state == .needsSteam }
 
-    init(profile: GameProfile, gate: OperationGate) {
+    init(profile: GameProfile, gate: OperationGate, environments: EnvironmentSettingsStore) {
         self.profile = profile
         self.gate = gate
         let (events, sink) = AsyncStream.makeStream(of: RuntimeEvent.self)
         let runtime = GameRuntime(profile: profile, runtime: .inBundle()) { sink.yield($0) }
         self.runtime = runtime
+        self.environmentSettings = environments.settings(for: runtime.paths)
         self.settings = runtime.settings
         Task { [weak self] in
             for await event in events {
@@ -89,6 +135,7 @@ final class GameModel: Identifiable {
             return (r.state(using: processes), r.isSessionRunning(using: processes), SteamStatus.downloadProgress(r.paths),
                     r.optimizationStatus(), r.onlineReady, r.canRemoveEnvironment)
         }
+        environmentSettings.reload()
         self.onlineReady = online
         self.canRemoveSetup = removable
         // An old error no longer describes a game that moved to another stage.
@@ -191,6 +238,7 @@ final class GameModel: Identifiable {
 @MainActor @Observable
 final class LibraryModel {
     let gate = OperationGate()
+    private let environments = EnvironmentSettingsStore()
     let games: [GameModel]
     /// Remembered between launches.
     var selectedID: String = UserDefaults.standard.string(forKey: "selectedGame")
@@ -199,8 +247,8 @@ final class LibraryModel {
     }
 
     init() {
-        let gate = self.gate
-        games = GameProfile.all.map { GameModel(profile: $0, gate: gate) }
+        let gate = self.gate, environments = self.environments
+        games = GameProfile.all.map { GameModel(profile: $0, gate: gate, environments: environments) }
     }
 
     var selected: GameModel? { games.first { $0.id == selectedID } }
