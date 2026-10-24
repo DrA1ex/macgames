@@ -68,10 +68,10 @@ enum CLI {
                     if profile.id == "aoe4" { s.aoePerformance = s.optimized }
                 }
                 if let v = value("--hud", in: args) { s.hud = v == "on" }
-                if let v = value("--hidpi", in: args) { s.hiDPI = v == "on" }
+                if let v = value("--hidpi", in: args) { try EnvironmentSettings(hiDPI: v == "on").save(to: game.paths) }
                 if let v = value("--aoe-performance", in: args) { s.aoePerformance = v == "on" }
                 game.settings = s
-                print("optimized: \(s.optimized), hud: \(s.hud), hiDPI: \(s.hiDPI == true), aoePerformance: \(s.aoePerformance == true)")
+                print("optimized: \(s.optimized), hud: \(s.hud), hiDPI: \(game.environmentSettings.hiDPI), aoePerformance: \(s.aoePerformance == true)")
             default:
                 FileHandle.standardError.write(Data((usage + "\n").utf8))
                 return 64

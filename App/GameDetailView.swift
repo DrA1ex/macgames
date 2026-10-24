@@ -262,9 +262,8 @@ private struct SettingsSection: View {
                     Toggle("", isOn: $game.settings.hud).labelsHidden().toggleStyle(.switch)
                 }
                 Divider().opacity(0.3)
-                row("HiDPI (Retina)", detail: "Enables high-resolution rendering on Retina and scaled displays. Restart the game to apply.") {
-                    Toggle("HiDPI (Retina)", isOn: Binding(get: { game.settings.hiDPI == true },
-                                                         set: { game.settings.hiDPI = $0 }))
+                row("HiDPI (Retina)", detail: "Applies to all games in \(game.runtime.paths.environment.title). Restart the game to apply.") {
+                    Toggle("HiDPI (Retina)", isOn: $game.hiDPI)
                         .labelsHidden().toggleStyle(.switch)
                 }
                 if game.profile.optimizedExecutableSHA256 != nil {

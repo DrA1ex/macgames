@@ -57,7 +57,7 @@ import Testing
     @Test func roundTripsThroughTheRoot() throws {
         let dir = try makeTempDir(); defer { try? FileManager.default.removeItem(at: dir) }
         let p = GamePaths(profile: .aoe4, root: dir)
-        let settings = LaunchSettings(optimized: false, hud: true, hiDPI: false)
+        let settings = LaunchSettings(optimized: false, hud: true)
         try settings.save(to: p)
         #expect(LaunchSettings.load(from: p) == settings)
     }

@@ -40,29 +40,24 @@ public struct LaunchSettings: Codable, Sendable, Equatable {
     public var hud: Bool
     /// Opt-in fixed-build AoE exception/cache extensions; nil preserves older settings.
     public var aoePerformance: Bool?
-    /// Use Wine's Retina rendering mode; older settings adopt the existing prefix value.
-    public var hiDPI: Bool?
 
-    public init(optimized: Bool = true, hud: Bool = false, aoePerformance: Bool? = nil, hiDPI: Bool? = nil) {
+    public init(optimized: Bool = true, hud: Bool = false, aoePerformance: Bool? = nil) {
         self.optimized = optimized
         self.hud = hud
         self.aoePerformance = aoePerformance
-        self.hiDPI = hiDPI
     }
 
     static func url(_ paths: GamePaths) -> URL { paths.gameData.appendingPathComponent("settings.json") }
 
     public static func load(from paths: GamePaths) -> LaunchSettings {
-        var settings = (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings(optimized: !paths.localLaunch)
-        if settings.hiDPI == nil {
-            settings.hiDPI = WineHiDPI.currentValue(in: paths.prefix) ?? paths.environment.games.contains {
-                GameRecipes.registry(for: $0).contains(WineHiDPI.registryValue(true))
-            }
-        }
-        return settings
+        (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings(optimized: !paths.localLaunch)
     }
 
     public func save(to paths: GamePaths) throws {
+        // Freeze migration before rewriting a legacy per-game HiDPI choice.
+        if !FileManager.default.fileExists(atPath: EnvironmentSettings.url(paths).path) {
+            try EnvironmentSettings.load(from: paths).save(to: paths)
+        }
         try FileManager.default.createDirectory(at: paths.gameData, withIntermediateDirectories: true)
         try JSONEncoder().encode(self).write(to: Self.url(paths), options: .atomic)
     }
