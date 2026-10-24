@@ -34,6 +34,8 @@ The first command that fetches the runtime downloads upstream runtime4 and check
 
 In the app, choose the matching profile, choose its installed EXE, then Play. Settings include **Rosetta optimization**, **HiDPI (Retina)** and the optional performance HUD. Profiles, settings and logs live under `~/Library/Application Support/macgames/<game-id>-local/`; game files stay in their chosen folder. See [LOCAL-AOE4.md](LOCAL-AOE4.md) for the local workflow and CLI.
 
+The release workflow signs the rebuilt sidecar with the release Developer ID and hardened runtime. Local builds keep their ad-hoc signatures.
+
 The full Xcode project is also present. Generate it with XcodeGen; its runtime embed phase uses the same source-patched helper. Fork builds use a distinct `com.dra1ex.macgames.local` identity and disable upstream automatic updates.
 
 ## Patch origins and history
