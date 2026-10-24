@@ -44,6 +44,13 @@ import Testing
         #expect(e["SteamGameId"] == nil)
     }
 
+    @Test func ageOfWonders4CarriesItsAppIDForADirectStart() {
+        let e = env(.aow4)
+        #expect(e["SteamAppId"] == "1669000")
+        #expect(e["SteamGameId"] == nil)
+        #expect(GameProfile.aow4.launch == .direct)
+    }
+
     @Test func skyrimUsesItsOwnDXMTOverrides() {
         #expect(env(.skyrim)["WINEDLLOVERRIDES"]?.contains("xaudio2_6,xaudio2_7,x3daudio1_6,x3daudio1_7=n,b") == true)
     }
