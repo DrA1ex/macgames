@@ -6,8 +6,8 @@ import MacGamesCore
 @MainActor
 enum CLI {
     static let usage = """
-    usage: MacGames --command <check|setup|launcher|install|play|stop|uninstall|remove-setup|status|reset-display|settings>
-                    --game <id> [--root <data root>] [--optimized on|off] [--hud on|off] [--hidpi on|off] [--local-exe /path/to/game.exe | --local]
+    usage: MacGames --command <check|setup|launcher|install|play|record-performance|stop|uninstall|remove-setup|status|reset-display|settings>
+                    --game <id> [--root <data root>] [--optimized on|off] [--hud on|off] [--hidpi on|off] [--local-exe /path/to/game.exe | --local] [--profile /diagnostic/folder]
     games: \(GameProfile.all.map(\.id).joined(separator: ", "))
     """
 
@@ -28,6 +28,7 @@ enum CLI {
         let game = GameRuntime(profile: profile, root: root, runtime: .inBundle(), localLaunch: local) { event in
             if case .progress(let line) = event { print(line); fflush(stdout) }
         }
+        if let folder = value("--profile", in: args) { game.diagnosticDirectory = URL(fileURLWithPath: folder) }
         do {
             if let exe = value("--local-exe", in: args) { try game.selectLocalExecutable(URL(fileURLWithPath: exe)) }
             if value("--aoe-performance", in: args) != nil {
@@ -48,6 +49,9 @@ enum CLI {
             case "play":
                 try game.play(LaunchContext.mainDisplay())
                 try game.waitForGameStart()
+            case "record-performance":
+                guard let folder = value("--output", in: args) else { throw SetupError("Specify a new --output folder for the recording.") }
+                try game.playWithPerformanceRecording(LaunchContext.mainDisplay(), output: URL(fileURLWithPath: folder))
             case "stop":
                 try game.stop()
             case "uninstall":

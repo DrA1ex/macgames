@@ -14,6 +14,10 @@ public final class GameRuntime: @unchecked Sendable {
     public let runtime: RuntimeLayout
     public let downloader: Downloader
     public let runner: ProcessRunner
+    /// Optional, per-run diagnostic output. Ordinary launches have no profiling overhead.
+    public var diagnosticDirectory: URL?
+    /// Frame timing capture is independent of the invasive x87 execution profiler.
+    public var performanceDirectory: URL?
     /// Receives progress lines and setup stages. Set once, at creation.
     let events: @Sendable (RuntimeEvent) -> Void
     /// Reads the live Wine processes under a folder; tests replace it.
@@ -95,6 +99,22 @@ public final class GameRuntime: @unchecked Sendable {
             env["MACGAMES_AOE_COMBINED"] = "1"
         }
         env["MACGAMES_HIDPI"] = environmentSettings.hiDPI ? "1" : "0"
+        if let performanceDirectory {
+            try fm.createDirectory(at: performanceDirectory, withIntermediateDirectories: true)
+            env.merge(PerformanceRecording.environment(output: performanceDirectory)) { $1 }
+        }
+        if let diagnosticDirectory, ["generic", "aoe-performance"].contains(env["MACGAMES_X87_MODE"] ?? "") {
+            try fm.createDirectory(at: diagnosticDirectory, withIntermediateDirectories: true)
+            env["MACGAMES_DIAGNOSTICS_DIR"] = diagnosticDirectory.path
+            env["AOELAB_COUNTERS_DIR"] = diagnosticDirectory.path
+            env["X87_PROFILE"] = diagnosticDirectory.appendingPathComponent("x87.prof").path
+            env["X87_SAMPLE"] = diagnosticDirectory.appendingPathComponent("guest-samples.txt").path
+            env["X87_SAMPLE_HZ"] = "1000"
+            // The sampler's fallback range is 32-bit; AoE IV is normally mapped above 4 GiB.
+            if let range = PEImage.addressRange(of: paths.gameExe) {
+                env["X87_GUEST_RANGE"] = String(format: "0x%llx-0x%llx", range.lowerBound, range.upperBound)
+            }
+        }
         return env
     }
 

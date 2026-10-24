@@ -23,6 +23,7 @@ else
 fi
 codesign --verify --strict "$ENGINE/bin/wine" "$ENGINE/bin/wineserver" "$HELPERS/x87sidecar"
 swift build --disable-sandbox --package-path "$ROOT/Packages/MacGamesCore" --scratch-path "$SCRATCH" --product MacGamesBridge
+swift build --disable-sandbox --package-path "$ROOT/Packages/MacGamesCore" --scratch-path "$SCRATCH" --product PerformanceRecorder
 swift build --disable-sandbox --package-path "$ROOT/Packages/MacGamesCore" --scratch-path "$SCRATCH" --target MacGamesCore
 BIN="$(swift build --disable-sandbox --package-path "$ROOT/Packages/MacGamesCore" --scratch-path "$SCRATCH" --show-bin-path)"
 mkdir -p "$ROOT/build"
@@ -59,6 +60,7 @@ if [ -f "$ROOT/build/aoe-runtime/sidecar-source-patched.tar.gz" ]; then
   cp "$ROOT/build/aoe-runtime/sidecar-source-patched.tar.gz" "$BUNDLE/Contents/Resources/Runtime/Sources/"
 fi
 ditto "$BIN/MacGamesBridge" "$BUNDLE/Contents/Helpers/MacGamesBridge"
+ditto "$BIN/PerformanceRecorder" "$BUNDLE/Contents/Helpers/PerformanceRecorder"
 xcrun clang -arch x86_64 -mmacosx-version-min=26.0 "$ROOT/Probe/rosetta-probe.c" -o "$BUNDLE/Contents/Helpers/RosettaProbe"
 codesign --force --sign - "$BUNDLE/Contents/Helpers/RosettaProbe"
 /usr/bin/python3 - "$BUNDLE/Contents/Info.plist" <<'PY'
@@ -76,6 +78,7 @@ with open(sys.argv[1], 'wb') as f:
 PY
 # Sign only the newly built helper and outer bundle. Preserve the engine's original entitlements.
 codesign --force --sign - "$BUNDLE/Contents/Helpers/MacGamesBridge"
+codesign --force --sign - "$BUNDLE/Contents/Helpers/PerformanceRecorder"
 codesign --force --sign - "$BUNDLE"
 codesign --verify --strict "$BUNDLE"
 # Refuse to overwrite an unrelated artifact at the fixed output path.

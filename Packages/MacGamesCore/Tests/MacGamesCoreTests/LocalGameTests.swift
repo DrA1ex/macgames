@@ -253,3 +253,29 @@ import BridgeKit
         #expect(!fixture.calls.contains { $0.lowercased().contains("steam") })
     }
 }
+
+@Suite struct DiagnosticImageTests {
+    @Test func reads64BitGuestBoundsAndRejectsTruncatedFiles() throws {
+        let dir = try makeTempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("game.exe")
+        var bytes = Data(repeating: 0, count: 256)
+        func put(_ value: UInt64, at offset: Int, count: Int) {
+            for i in 0..<count { bytes[offset + i] = UInt8(truncatingIfNeeded: value >> (i * 8)) }
+        }
+        put(0x5a4d, at: 0, count: 2); put(64, at: 60, count: 4)
+        put(0x4550, at: 64, count: 4); put(0x20b, at: 88, count: 2)
+        put(0x140000000, at: 112, count: 8); put(0x8000000, at: 144, count: 4)
+        try bytes.write(to: file)
+        #expect(PEImage.addressRange(of: file) == 0x140000000..<0x148000000)
+        try bytes.prefix(70).write(to: file)
+        #expect(PEImage.addressRange(of: file) == nil)
+    }
+
+    @Test func normalLaunchHasNoProfilingOverhead() throws {
+        let fixture = try FakeEnvironment(.aoe4, localLaunch: true); defer { fixture.cleanUp() }
+        let env = try fixture.runtime.launchEnvironment()
+        #expect(env["X87_PROFILE"] == nil)
+        #expect(env["X87_SAMPLE"] == nil)
+        #expect(env["X87_GUEST_RANGE"] == nil)
+    }
+}

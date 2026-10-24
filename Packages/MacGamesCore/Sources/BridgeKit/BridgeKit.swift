@@ -20,6 +20,8 @@ public enum Bridge {
                               isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
                               hash: (String) throws -> String) -> BridgeDecision {
         let sidecar = ((arguments.first ?? "") as NSString).deletingLastPathComponent + "/x87sidecar"
+        let counters = environment["AOELAB_COUNTERS_DIR"]
+        let allowCounters = counters?.hasPrefix("/") == true && counters == environment["MACGAMES_DIAGNOSTICS_DIR"]
         if arguments.count > 1, arguments[1] == "--aoe-performance" {
             guard arguments.count >= 5, arguments[2] == "--cooperative", isExecutable(sidecar),
                   let prefix = environment["WINEPREFIX"] else {
@@ -31,9 +33,9 @@ public enum Bridge {
                          "AOELAB_SOFTFAULT_GAME", "AOELAB_SIDECAR_PATH", "AOELAB_STEAM_SINGLEPROCESS"]
             if !matched {
                 unset += environment.keys.filter {
-                    ($0.hasPrefix("AOELAB_") || $0.hasPrefix("AOE_SOFTFAULT_"))
+                    ($0.hasPrefix("AOELAB_") || $0.hasPrefix("AOE_SOFTFAULT_")) && !($0 == "AOELAB_COUNTERS_DIR" && allowCounters)
                 }
-            } else {
+            } else if !allowCounters {
                 unset.append("AOELAB_COUNTERS_DIR")
             }
             return .exec(path: sidecar, argv: [sidecar] + arguments.dropFirst(2), unset: Array(Set(unset)).sorted())
@@ -45,7 +47,7 @@ public enum Bridge {
                 return .fail("Generic x87 launch needs a sidecar, Wine loader and game EXE.")
             }
             var unset = environment.keys.filter {
-                ($0.hasPrefix("AOELAB_") || $0.hasPrefix("AOE_SOFTFAULT_"))
+                ($0.hasPrefix("AOELAB_") || $0.hasPrefix("AOE_SOFTFAULT_")) && !($0 == "AOELAB_COUNTERS_DIR" && allowCounters)
             }
             unset += ["X87_ALWAYS_NONE", "WINELOADERNOEXEC", pinKey, "MACGAMES_X87_MODE"]
             if environment["MACGAMES_DIAGNOSTICS_DIR"] != nil { unset.append("MACGAMES_DIAGNOSTICS_DIR") }
