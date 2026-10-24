@@ -145,7 +145,7 @@ extension GameRuntime {
 
     public func playOnline(_ context: LaunchContext) throws {
         if !onlineReady { try setupOnline() }
-        try ensureSteamReady()
+        if !paths.localLaunch { try ensureSteamReady() }
         // The CnCNet client sizes itself to the display that Windows programs see.
         let context = profile.online == .cncnet ? windowsDisplay(context) : context
         restoreKeptSaves()

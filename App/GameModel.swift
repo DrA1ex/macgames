@@ -4,7 +4,7 @@ import Foundation
 import MacGamesCore
 import Observation
 
-/// Games share one Steam and one Wine prefix, so only one task may run at a time.
+/// Serializes setup and launch operations in shared Windows environments.
 @MainActor @Observable
 final class OperationGate {
     /// The game whose task is running, if any.
@@ -54,10 +54,9 @@ final class GameModel: Identifiable {
     let runtime: GameRuntime
     let environmentSettings: EnvironmentSettingsModel
     private(set) var state: GameState = .notSetUp
-    /// The shared Wine session (Steam and any game) is alive.
+    /// The shared Windows environment is alive.
     private(set) var sessionRunning = false
-    /// 0...1 while Steam installs or updates this game.
-    private(set) var downloadProgress: Double?
+    private(set) var sidecarRunning = false
     /// The game's community online client is installed.
     private(set) var onlineReady = false
     @ObservationIgnored private let gate: OperationGate
@@ -92,17 +91,36 @@ final class GameModel: Identifiable {
 
     nonisolated var id: String { profile.id }
 
-    var steamAvailable: Bool { state != .notSetUp && state != .needsSteam }
-    var showsSetupSteps: Bool { step != nil || state == .notSetUp || state == .needsSteam }
+    var localLaunch: Bool { runtime.paths.localLaunch }
+    var actionTitle: String {
+        if localLaunch && (localExecutable == nil || state == .needsGame) { return "Choose EXE…" }
+        if localLaunch && state == .notSetUp { return "Play" }
+        return state.actionTitle(launcher: launcherName)
+    }
+    var summary: String {
+        guard localLaunch else { return state.summary(launcher: launcherName) }
+        switch state {
+        case .notSetUp: return "Choose the installed game’s EXE. The first Play prepares its Windows environment."
+        case .needsGame: return "The selected EXE is missing or unreadable. Choose it again."
+        case .ready: return "Ready to launch the selected EXE without Steam."
+        case .running: return "The game is running in the \(runtime.paths.environment.title) environment."
+        default: return "Choose the installed game's EXE."
+        }
+    }
+    private(set) var localExecutable: URL?
+    private(set) var workingDirectory: URL
+    var showsSetupSteps: Bool { step != nil || (!localLaunch && (state == .notSetUp || state == .needsSteam)) }
 
     init(profile: GameProfile, gate: OperationGate, environments: EnvironmentSettingsStore) {
         self.profile = profile
         self.gate = gate
         let (events, sink) = AsyncStream.makeStream(of: RuntimeEvent.self)
-        let runtime = GameRuntime(profile: profile, runtime: .inBundle()) { sink.yield($0) }
+        let runtime = GameRuntime(profile: profile, runtime: .inBundle(), localLaunch: true) { sink.yield($0) }
         self.runtime = runtime
         self.environmentSettings = environments.settings(for: runtime.paths)
         self.settings = runtime.settings
+        self.localExecutable = runtime.localExecutable
+        self.workingDirectory = runtime.paths.workingDirectory
         Task { [weak self] in
             for await event in events {
                 switch event {
@@ -130,11 +148,14 @@ final class GameModel: Identifiable {
     func refresh(_ snapshot: ProcessSnapshot? = nil) async {
         guard !locked else { return }
         let r = runtime
-        let (state, live, download, optimization, online, removable) = await Self.off(Self.reads) {
+        let (state, live, sidecar, optimization, online, removable) = await Self.off(Self.reads) {
             let processes = snapshot ?? ProcessSnapshot.take(under: r.paths.engine)
-            return (r.state(using: processes), r.isSessionRunning(using: processes), SteamStatus.downloadProgress(r.paths),
+            return (r.state(using: processes), r.isSessionRunning(using: processes),
+                    processes.isRunning(executable: "x87sidecar", under: r.paths.engine),
                     r.optimizationStatus(), r.onlineReady, r.canRemoveEnvironment)
         }
+        self.localExecutable = r.localExecutable
+        self.workingDirectory = r.paths.workingDirectory
         environmentSettings.reload()
         self.onlineReady = online
         self.canRemoveSetup = removable
@@ -143,30 +164,46 @@ final class GameModel: Identifiable {
         self.optimization = optimization
         self.state = state
         self.sessionRunning = live
-        self.downloadProgress = download
+        self.sidecarRunning = sidecar
     }
 
     /// The one action that moves this game to its next stage.
     func primaryAction() {
-        switch state {
-        case .notSetUp:
-            finishedSteps = []
-            perform("Setting up") { r in try r.prepare(); try r.installLauncher(); try r.openForInstall() }
-        case .needsSteam:
-            perform("Installing \(launcherName)") { r in try r.installLauncher(); try r.openForInstall() }
-        case .needsGame: perform("Opening \(launcherName)") { r in try r.openForInstall() }
-        case .installing: openSteam()
-        case .ready:
-            let context = LaunchContext.mainDisplay()
-            perform("Starting \(profile.title)") { r in try r.play(context); try r.waitForGameStart() }
-        case .running: confirmingStop = true
-        }
+        if state == .running { confirmingStop = true; return }
+        guard localExecutable != nil, state != .needsGame else { chooseExecutable(); return }
+        let context = LaunchContext.mainDisplay()
+        finishedSteps = []
+        perform("Starting \(profile.title)") { r in try r.play(context); try r.waitForGameStart() }
     }
 
-    /// "Steam" or "Battle.net": the client this game's environment uses.
-    var launcherName: String { profile.gameEnvironment.launcher == .battleNet ? "Battle.net" : "Steam" }
+    var launcherName: String { "Windows environment" }
 
-    func openSteam() { perform("Opening \(launcherName)") { r in try r.openLauncher() } }
+    func chooseExecutable() {
+        guard !locked else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Choose \(profile.title)’s EXE"
+        panel.message = "Select the game executable in its installed folder. Files stay in place."
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = localExecutable?.deletingLastPathComponent()
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        perform("Saving the selected EXE") { try $0.selectLocalExecutable(url) }
+    }
+
+    func chooseWorkingDirectory() {
+        guard !locked, !sessionRunning else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Working folder"
+        panel.message = "Usually this is the folder containing the EXE. Choose another only if this game needs it."
+        panel.canChooseFiles = false; panel.canChooseDirectories = true
+        panel.directoryURL = workingDirectory
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        perform("Saving the working folder") { try $0.setLocalWorkingDirectory(url) }
+    }
+    func resetWorkingDirectory() {
+        perform("Using the EXE’s folder") { try $0.setLocalWorkingDirectory(nil) }
+    }
 
     func playOnline() {
         let context = LaunchContext.mainDisplay()
@@ -174,13 +211,13 @@ final class GameModel: Identifiable {
     }
 
     func requestStop() {
-        if state == .running { confirmingStop = true } else { stop() }
+        if state == .running || (localLaunch && sessionRunning) { confirmingStop = true } else { stop() }
     }
 
     func stop() { perform("Stopping") { r in try r.stop() } }
 
     /// The game has files on this Mac.
-    var canUninstall: Bool { state == .ready || state == .installing }
+    var canUninstall: Bool { !localLaunch && (state == .ready || state == .installing) }
 
     /// Measures what goes, then asks for confirmation.
     func requestUninstall() {
@@ -203,7 +240,7 @@ final class GameModel: Identifiable {
     }
     func resetDisplay() { runtime.resetDisplay(); activity = "The next launch sets the window size again." }
     func showLogs() { NSWorkspace.shared.open(runtime.paths.logs) }
-    /// The game's install folder once Steam made it, otherwise the library.
+    /// The external installation folder, or the environment before selection.
     var dataFolder: URL {
         let folder = runtime.paths.installDir
         return FileManager.default.fileExists(atPath: folder.path) ? folder : runtime.paths.root
@@ -252,9 +289,7 @@ final class LibraryModel {
     }
 
     var selected: GameModel? { games.first { $0.id == selectedID } }
-    var selectedEnvironment: GameEnvironment { selected?.profile.gameEnvironment ?? .steam }
-
-    /// Games grouped by the Windows environment they live in, shared Steam first.
+    /// Match upstream's environment groups while keeping direct EXE launches.
     var sections: [(title: String, games: [GameModel])] {
         GameEnvironment.groups.map { group in
             (group.title, group.games.compactMap { profile in games.first { $0.id == profile.id } })
@@ -264,45 +299,15 @@ final class LibraryModel {
     /// Games in sidebar order, for ⌘1…⌘9.
     var ordered: [GameModel] { sections.flatMap(\.games) }
 
-    /// Stopping a launcher ends the games it runs, so a running game's page asks first.
-    func requestStopSteam() {
-        let env = selectedEnvironment
-        if let playing = games.first(where: { $0.profile.environment == env.id && $0.state == .running }) {
-            selectedID = playing.id
-            playing.confirmingStop = true
-        } else {
-            selected?.stop()
-        }
-    }
-
-    /// Every game of an environment shares its session, so any of them can tell.
-    func launcherRunning(_ env: GameEnvironment) -> Bool {
-        games.contains { $0.profile.environment == env.id && $0.sessionRunning }
-    }
-
     func select(index: Int) {
         guard ordered.indices.contains(index) else { return }
         selectedID = ordered[index].id
     }
 
-    /// Account and downloads of each environment's Steam.
-    private(set) var launcher: [String: SteamStatus] = [:]
-    /// Each Steam client's own icon, read from its install once it exists.
-    private(set) var steamIcons: [String: NSImage] = [:]
-
     func poll() async {
         while !Task.isCancelled {
             let snapshot = await Task.detached { ProcessSnapshot.take(under: GamePaths.dataFolder()) }.value
             for game in games { await game.refresh(snapshot) }
-            for env in GameEnvironment.all where env.launcher == .steam {
-                let root = GamePaths.defaultRoot(for: env)
-                guard FileManager.default.fileExists(atPath: root.path) else { continue }
-                launcher[env.id] = await Task.detached { SteamStatus.read(root: root, environment: env) }.value
-                if steamIcons[env.id] == nil, let game = env.games.first,
-                   let icon = NSImage(contentsOf: GamePaths(profile: game, root: root).steamDir.appendingPathComponent("public/steam_tray.ico")) {
-                    steamIcons[env.id] = icon
-                }
-            }
             try? await Task.sleep(for: .seconds(3))
         }
     }

@@ -20,6 +20,37 @@ public enum Bridge {
                               isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
                               hash: (String) throws -> String) -> BridgeDecision {
         let sidecar = ((arguments.first ?? "") as NSString).deletingLastPathComponent + "/x87sidecar"
+        if arguments.count > 1, arguments[1] == "--aoe-performance" {
+            guard arguments.count >= 5, arguments[2] == "--cooperative", isExecutable(sidecar),
+                  let prefix = environment["WINEPREFIX"] else {
+                return .fail("AoE performance launch needs a sidecar, Wine loader and game EXE.")
+            }
+            let game = unixPath(for: arguments[4], prefix: prefix, cwd: cwd)
+            let matched = environment[pinKey].flatMap { pin in (try? hash(game)).map { $0 == pin } } ?? false
+            var unset = ["X87_ALWAYS_NONE", "WINELOADERNOEXEC", pinKey, "MACGAMES_X87_MODE", "MACGAMES_DIAGNOSTICS_DIR",
+                         "AOELAB_SOFTFAULT_GAME", "AOELAB_SIDECAR_PATH", "AOELAB_STEAM_SINGLEPROCESS"]
+            if !matched {
+                unset += environment.keys.filter {
+                    ($0.hasPrefix("AOELAB_") || $0.hasPrefix("AOE_SOFTFAULT_"))
+                }
+            } else {
+                unset.append("AOELAB_COUNTERS_DIR")
+            }
+            return .exec(path: sidecar, argv: [sidecar] + arguments.dropFirst(2), unset: Array(Set(unset)).sorted())
+        }
+        // Generic x87 translation is independent of an EXE build. The AoE softfault/cache
+        // extensions below are a separate feature and retain their exact-build guard.
+        if arguments.count > 1, arguments[1] == "--generic-x87" {
+            guard arguments.count >= 5, arguments[2] == "--cooperative", isExecutable(sidecar) else {
+                return .fail("Generic x87 launch needs a sidecar, Wine loader and game EXE.")
+            }
+            var unset = environment.keys.filter {
+                ($0.hasPrefix("AOELAB_") || $0.hasPrefix("AOE_SOFTFAULT_"))
+            }
+            unset += ["X87_ALWAYS_NONE", "WINELOADERNOEXEC", pinKey, "MACGAMES_X87_MODE"]
+            if environment["MACGAMES_DIAGNOSTICS_DIR"] != nil { unset.append("MACGAMES_DIAGNOSTICS_DIR") }
+            return .exec(path: sidecar, argv: [sidecar] + arguments.dropFirst(2), unset: Array(Set(unset)).sorted())
+        }
         guard arguments.count > 1, arguments[1] == "--cooperative" else {
             return .exec(path: sidecar, argv: [sidecar] + arguments.dropFirst(), unset: [])
         }

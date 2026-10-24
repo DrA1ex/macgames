@@ -13,6 +13,11 @@ public enum GameState: String, Sendable, Equatable {
     public static func derive(_ paths: GamePaths, sessionRunning: Bool, gameProcessRunning: Bool = false) -> GameState {
         let fm = FileManager.default
         guard fm.fileExists(atPath: paths.runtimeReady.path) else { return .notSetUp }
+        if paths.localLaunch {
+            if gameProcessRunning { return .running }
+            guard let selection = LocalGameSelection.load(from: paths), (try? selection.validate()) != nil else { return .needsGame }
+            return .ready
+        }
         if paths.profile.launch == .battleNet {
             // `.needsSteam` stands for the environment's launcher client.
             guard fm.fileExists(atPath: paths.battleNetExe.path) else { return .needsSteam }
@@ -42,7 +47,9 @@ public struct LaunchSettings: Codable, Sendable, Equatable {
     static func url(_ paths: GamePaths) -> URL { paths.gameData.appendingPathComponent("settings.json") }
 
     public static func load(from paths: GamePaths) -> LaunchSettings {
-        (try? JSONDecoder().decode(LaunchSettings.self, from: Data(contentsOf: url(paths)))) ?? LaunchSettings()
+        let data = (try? Data(contentsOf: url(paths))) ?? (paths.localLaunch
+            ? try? Data(contentsOf: paths.legacyLocalGameData.appendingPathComponent("settings.json")) : nil)
+        return data.flatMap { try? JSONDecoder().decode(Self.self, from: $0) } ?? LaunchSettings(optimized: !paths.localLaunch)
     }
 
     public func save(to paths: GamePaths) throws {

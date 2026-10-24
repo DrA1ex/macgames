@@ -32,11 +32,13 @@ public final class GameRuntime: @unchecked Sendable {
     /// The displays as a new Wine session takes them in; tests replace it.
     var displaySignature: @Sendable () -> String? = { OverwatchDisplay.displaySignature() }
 
-    public init(profile: GameProfile, root: URL? = nil, runtime: RuntimeLayout,
+    public init(profile: GameProfile, root: URL? = nil, runtime: RuntimeLayout, localLaunch: Bool = false,
                 downloadCache: URL = GamePaths.sharedDownloads(),
                 events: @escaping @Sendable (RuntimeEvent) -> Void = { _ in }) {
         self.profile = profile
-        self.paths = GamePaths(profile: profile, root: root ?? GamePaths.defaultRoot(for: profile.gameEnvironment))
+        let local = localLaunch
+        self.paths = GamePaths(profile: profile, root: root ?? GamePaths.defaultRoot(for: profile.gameEnvironment),
+                               localLaunch: local)
         self.runtime = runtime
         self.downloader = Downloader(cache: downloadCache)
         self.runner = ProcessRunner(logDirectory: paths.logs)
@@ -69,18 +71,29 @@ public final class GameRuntime: @unchecked Sendable {
             let report = try check()
             optimized = report.optimizationAvailable
             report.notes.forEach { progress($0) }
-            for helper in [runtime.bridge, runtime.sidecar] where !fm.isExecutableFile(atPath: helper.path) {
+            for helper in optimized ? [runtime.bridge, runtime.sidecar] : [] where !fm.isExecutableFile(atPath: helper.path) {
                 throw SetupError("The \(helper.lastPathComponent) helper is missing at \(helper.path).")
             }
         }
         var env = environment(optimized: optimized, hud: s.hud)
-        if optimized, profile.id == "aoe4",
-           (try? String(contentsOf: runtime.resources.appendingPathComponent("aoe-performance-v2"), encoding: .utf8)
-               .trimmingCharacters(in: .whitespacesAndNewlines)) == "2" {
+        let composed = (try? String(contentsOf: runtime.resources.appendingPathComponent("aoe-performance-v2"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)) == "2"
+        if optimized, composed, profile.id == "aoe4",
+           env["MACGAMES_X87_MODE"] == "generic", let pin = profile.optimizedExecutableSHA256 {
+            // Direct cooperative launch avoids aoe_reexec_sidecar, whose legacy
+            // path sets X87_ALWAYS_NONE. Bridge verifies the actual EXE first.
+            env["MACGAMES_X87_MODE"] = "aoe-performance"
+            env["MACGAMES_OPTIMIZED_SHA256"] = pin
+            env["AOELAB_CODE_CACHE_GAME"] = "1"
+            env["AOELAB_SOFTFAULT_BRIDGE"] = "1"
+            env["AOE_SOFTFAULT_PC"] = "0x140001000"
+            env["AOE_SOFTFAULT_END"] = "0x1456ddadc"
+            env["AOE_SOFTFAULT_TARGET1"] = "0x180000000"
+            env["AOE_SOFTFAULT_TARGET"] = "0x180000010"
+        }
+        if optimized, composed, profile.id == "aoe4" {
             env["MACGAMES_AOE_COMBINED"] = "1"
         }
-        // Included in Steam's managed fingerprint so a changed display mode
-        // restarts the session before the registry recipe is applied.
         env["MACGAMES_HIDPI"] = environmentSettings.hiDPI ? "1" : "0"
         return env
     }
@@ -89,7 +102,8 @@ public final class GameRuntime: @unchecked Sendable {
     public func state(using snapshot: ProcessSnapshot? = nil) -> GameState {
         let live = snapshot ?? processes(paths.engine)
         return GameState.derive(paths, sessionRunning: isSessionRunning(using: live),
-                                gameProcessRunning: live.isRunning(executable: profile.executableName, under: paths.engine))
+                                gameProcessRunning: (paths.localLaunch ? Array(Set([paths.gameExe.lastPathComponent] + GameRecipes.processNames(for: profile))) : [profile.executableName])
+                                    .contains { live.isRunning(executable: $0, under: paths.engine) })
     }
 
     // MARK: Setup
@@ -109,7 +123,7 @@ public final class GameRuntime: @unchecked Sendable {
         try check()
         EngineInstaller.removeLeftovers(in: paths.root)
         downloader.removePartials()
-        guard !isSessionRunning() else { throw SetupError("Close \(profile.title) and its Steam window before setup.") }
+        guard !isSessionRunning() else { throw SetupError("Close this environment before setup.") }
         try fm.createDirectory(at: paths.logs, withIntermediateDirectories: true)
 
         stepChanged(.libraries)
@@ -155,7 +169,7 @@ public final class GameRuntime: @unchecked Sendable {
         try ensureRecipes(environment: plain)
         try runner.run(paths.wineserver, ["-w"], environment: plain, timeout: 120)
         for game in paths.environment.games where game.graphics == .dxmt {
-            let gamePaths = GamePaths(profile: game, root: paths.root)
+            let gamePaths = GamePaths(profile: game, root: paths.root, localLaunch: paths.localLaunch)
             // A game prepared for the first time also gets its window fitted on first launch.
             let firstTime = !fm.fileExists(atPath: gamePaths.graphics.path)
             for folder in ["shader-cache", "game-archives", "recipes"] {
@@ -193,12 +207,14 @@ public final class GameRuntime: @unchecked Sendable {
     /// Installs the environment's launcher client: Steam, plus the Rockstar
     /// Games Launcher where Rockstar games need it, or the Battle.net client.
     public func installLauncher() throws {
+        if paths.localLaunch { return }
         if paths.environment.launcher == .battleNet { try installBattleNet(); return }
         try installSteam()
         if ["rockstar", "gta5"].contains(paths.environment.id) { try installRockstarLauncher() }
     }
 
     public func installSteam() throws {
+        try requireLauncherMode()
         guard fm.fileExists(atPath: paths.runtimeReady.path) else { throw SetupError("Set up the Windows environment first.") }
         stepChanged(.steam)
         if !fm.fileExists(atPath: paths.steamExe.path) {
@@ -254,9 +270,10 @@ public final class GameRuntime: @unchecked Sendable {
     func runningGameTitle() -> String? {
         let live = processes(paths.engine)
         for game in paths.environment.games {
-            let gamePaths = GamePaths(profile: game, root: paths.root)
-            if GameRecipes.processNames(for: game).contains(where: { live.isRunning(executable: $0, under: paths.engine) })
-                || (isSessionRunning(using: live) && GameProcessLog.isRunning(game, paths: gamePaths)) {
+            let gamePaths = GamePaths(profile: game, root: paths.root, localLaunch: paths.localLaunch)
+            let names = Set(GameRecipes.processNames(for: game) + (paths.localLaunch ? [gamePaths.gameExe.lastPathComponent] : []))
+            if names.contains(where: { live.isRunning(executable: $0, under: paths.engine) })
+                || (!paths.localLaunch && isSessionRunning(using: live) && GameProcessLog.isRunning(game, paths: gamePaths)) {
                 return game.title
             }
         }
@@ -266,7 +283,7 @@ public final class GameRuntime: @unchecked Sendable {
     /// The sandbox folders of every game in this environment; Wine starts with them as HOME and TMPDIR.
     func ensureSandbox() {
         for game in paths.environment.games {
-            for folder in GameRecipes.sandboxFolders(for: game, paths: GamePaths(profile: game, root: paths.root)) {
+            for folder in GameRecipes.sandboxFolders(for: game, paths: GamePaths(profile: game, root: paths.root, localLaunch: paths.localLaunch)) {
                 try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
             }
         }
@@ -310,6 +327,7 @@ public final class GameRuntime: @unchecked Sendable {
     }
 
     public func startSteam(_ mode: SteamLaunch.Mode) throws {
+        try requireLauncherMode()
         guard fm.fileExists(atPath: paths.runtimeReady.path), fm.fileExists(atPath: paths.steamExe.path) else {
             throw SetupError("Set up Steam first.")
         }
@@ -375,6 +393,7 @@ public final class GameRuntime: @unchecked Sendable {
     }
 
     public func play(displayWidth: Int? = nil, displayHeight: Int? = nil) throws {
+        if paths.localLaunch { try playLocal(LaunchContext(width: displayWidth ?? 1280, height: displayHeight ?? 720)); return }
         if let blocker = Self.playBlocker(state(), title: profile.title) { throw SetupError(blocker) }
         var extra: [String] = []
         let fixDisplay = profile.id == "cs2" && fm.fileExists(atPath: cs2DisplayPending.path)
@@ -408,21 +427,29 @@ public final class GameRuntime: @unchecked Sendable {
 
     private let statusLock = NSLock()
     private var cachedSidecarSupport: Bool?
-    private var cachedExecutable: (size: UInt64, modified: Date, sha: String)?
+    private var cachedExecutable: (path: String, size: UInt64, modified: Date, sha: String)?
 
     /// What the next launch does with the x87 optimization. The game's hash is
     /// cached until the file changes; the sidecar probe runs once per launch.
     public func optimizationStatus() -> OptimizationStatus {
         guard profile.optimizedExecutableSHA256 != nil else { return .notApplicable }
         let enabled = settings.optimized
+        if !enabled { return .off }
         statusLock.lock(); defer { statusLock.unlock() }
+        if paths.localLaunch {
+            guard localExecutable != nil else { return .waitingForGame }
+            if cachedSidecarSupport == nil {
+                cachedSidecarSupport = (try? runner.run(runtime.sidecar, ["--probe"], timeout: 25)) != nil
+            }
+            return cachedSidecarSupport == true ? .active : .unsupportedRosetta
+        }
         var sha: String?
         if let attributes = try? fm.attributesOfItem(atPath: paths.gameExe.path),
            let size = attributes[.size] as? UInt64, let modified = attributes[.modificationDate] as? Date {
-            if let cached = cachedExecutable, cached.size == size, cached.modified == modified {
+            if let cached = cachedExecutable, cached.path == paths.gameExe.path, cached.size == size, cached.modified == modified {
                 sha = cached.sha
             } else if let hash = try? sha256Hex(ofFileAt: paths.gameExe) {
-                cachedExecutable = (size, modified, hash); sha = hash
+                cachedExecutable = (paths.gameExe.path, size, modified, hash); sha = hash
             }
         }
         if cachedSidecarSupport == nil {
@@ -477,12 +504,12 @@ extension GameRuntime {
     /// With `mustKeepRunning` false, a quick exit with an error is not a failure: such a program
     /// hands its work to one that already runs.
     func startDetached(_ arguments: [String], environment: [String: String], workingDirectory: URL, log name: String,
-                       mustKeepRunning: Bool = true) throws {
+                       mustKeepRunning: Bool = true, executable: URL? = nil) throws {
         try fm.createDirectory(at: paths.logs, withIntermediateDirectories: true)
         let log = paths.logs.appendingPathComponent(name)
         let handle = try ProcessRunner.appendHandle(for: log)
         let process = Process()
-        process.executableURL = paths.wine
+        process.executableURL = executable ?? paths.wine
         process.arguments = arguments
         process.environment = joined(environment)
         process.currentDirectoryURL = workingDirectory
@@ -538,6 +565,7 @@ extension GameRuntime {
 
     /// Opens Battle.net. With `play`, Battle.net also starts the game, for games with a product code.
     public func openBattleNet(play: Bool = false) throws {
+        try requireLauncherMode()
         guard fm.fileExists(atPath: paths.battleNetExe.path) else { try installBattleNet(); return }
         let request = play ? profile.battleNetProduct.map { ["--exec=launch \($0)"] } ?? [] : []
         let client = [paths.windowsPath(paths.battleNetExe)] + GameRecipes.battleNetFlags(for: paths.environment) + request
@@ -589,6 +617,7 @@ extension GameRuntime {
 
     /// Opens the environment's launcher window: Battle.net, or Steam.
     public func openLauncher() throws {
+        try requireLauncherMode()
         paths.environment.launcher == .battleNet ? try openBattleNet() : try startSteam(.open)
     }
 
@@ -605,6 +634,7 @@ extension GameRuntime {
     // MARK: Launch
 
     public func play(_ context: LaunchContext) throws {
+        if paths.localLaunch { try playLocal(context); return }
         if let blocker = Self.playBlocker(state(), title: profile.title) { throw SetupError(blocker) }
         // Red Alert 2 sizes itself to the display that Windows programs see.
         let context = profile.id == "red-alert2" ? windowsDisplay(context) : context
@@ -666,6 +696,7 @@ extension GameRuntime {
     /// After Play, Steam needs half a minute or more to start a game. Waits until the game's
     /// own process runs, so the game shows as starting rather than ready until then.
     public func waitForGameStart() throws {
+        if paths.localLaunch { try waitForLocalGameStart(); return }
         guard profile.launch == .steam else { return }
         progress("Waiting for Steam to start \(profile.title)…")
         let deadline = Date().addingTimeInterval(gameStartTimeout)
@@ -805,6 +836,7 @@ public enum CabinetScanner {
 extension GameRuntime {
     /// Opens the launcher where the user installs this game.
     public func openForInstall() throws {
+        try requireLauncherMode()
         paths.environment.launcher == .battleNet ? try openBattleNet() : try startSteam(.install)
     }
 }

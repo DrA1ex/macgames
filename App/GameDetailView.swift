@@ -24,6 +24,7 @@ struct GameDetailView: View {
             ZStack(alignment: .top) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Space.xxl) {
+                        if game.localLaunch { LocalExecutableSection(game: game) }
                         ActionBar(game: game)
                         if let error = game.error {
                             ErrorBanner(message: error, showLogs: game.showLogs, dismiss: game.dismissError)
@@ -66,9 +67,9 @@ struct GameDetailView: View {
             }
         }
         .confirmationDialog("Stop \(game.profile.title)?", isPresented: $game.confirmingStop) {
-            Button("Stop the game and Steam", role: .destructive, action: game.stop)
+            Button(game.localLaunch ? "Stop the game" : "Stop the game and Steam", role: .destructive, action: game.stop)
         } message: {
-            Text("The game and Steam close at once. Progress since your last save is lost.")
+            Text(game.localLaunch ? "The shared \(game.runtime.paths.environment.title) Windows session closes. Progress since your last save is lost." : "The game and Steam close at once. Progress since your last save is lost.")
         }
         .confirmationDialog(removalTitle, isPresented: removalShown, presenting: game.removal) { removal in
             switch removal {
@@ -143,7 +144,7 @@ private struct CompactPlay: View {
         Button(action: game.primaryAction) {
             HStack(spacing: 6) {
                 Image(systemName: game.state.actionSymbol).contentTransition(.symbolEffect(.replace))
-                Text(game.state.actionTitle(launcher: game.launcherName))
+                Text(game.actionTitle)
             }
             .font(.system(size: 13, weight: .bold))
             .padding(.horizontal, Space.l)
@@ -170,7 +171,7 @@ private struct ActionBar: View {
                         Image(systemName: game.state.actionSymbol)
                             .contentTransition(.symbolEffect(.replace))
                     }
-                    Text(game.state.actionTitle(launcher: game.launcherName)).contentTransition(.interpolate)
+                    Text(game.actionTitle).contentTransition(.interpolate)
                 }
                 .font(.system(size: 16, weight: .bold))
                 .padding(.horizontal, Space.xl + Space.xs)
@@ -203,7 +204,7 @@ private struct ActionBar: View {
                 }
             }
 
-            Text(game.activity ?? game.state.summary(launcher: game.launcherName))
+            Text(game.activity ?? game.summary)
                 .font(.system(size: 13))
                 .foregroundStyle(.white.opacity(0.78))
                 .lineLimit(2)
@@ -211,37 +212,9 @@ private struct ActionBar: View {
                 .padding(.leading, Space.xs)
                 .animation(Motion.morph, value: game.activity)
 
-            if game.state == .installing, let progress = game.downloadProgress {
-                DownloadBar(progress: progress, accent: game.profile.accent)
-                    .frame(maxWidth: 420)
-                    .padding(.leading, Space.xs)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+
         }
         .animation(Motion.morph, value: game.state)
-    }
-}
-
-/// A thin bar with the percentage, animated as Steam reports bytes.
-struct DownloadBar: View {
-    let progress: Double
-    let accent: Color
-
-    var body: some View {
-        HStack(spacing: Space.s) {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.12))
-                    Capsule().fill(accent).frame(width: max(4, geo.size.width * progress))
-                }
-            }
-            .frame(height: 5)
-            Text(progress, format: .percent.precision(.fractionLength(0)))
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
-                .foregroundStyle(.secondary)
-                .contentTransition(.numericText(value: progress))
-        }
-        .animation(.easeOut(duration: 0.6), value: progress)
     }
 }
 
@@ -289,20 +262,29 @@ private struct SettingsSection: View {
                     Toggle("", isOn: $game.settings.hud).labelsHidden().toggleStyle(.switch)
                 }
                 Divider().opacity(0.3)
-                row("HiDPI (Retina)", detail: "Applies to all games in \(game.runtime.paths.environment.title). Restart \(game.launcherName) to apply.") {
+                row("HiDPI (Retina)", detail: "Applies to all games in \(game.runtime.paths.environment.title). Restart the game to apply.") {
                     Toggle("HiDPI (Retina)", isOn: $game.hiDPI)
                         .labelsHidden().toggleStyle(.switch)
                 }
                 if game.profile.optimizedExecutableSHA256 != nil {
                     Divider().opacity(0.3)
                     row("Rosetta optimization", detail: "Accelerates x87 math, exception handling and translated-code reuse on the supported AoE IV build.", status: game.optimization.detail) {
-                        Toggle("", isOn: $game.settings.optimized).labelsHidden().toggleStyle(.switch)
+                        Toggle("Rosetta optimization", isOn: $game.settings.optimized).labelsHidden().toggleStyle(.switch)
                     }
                 }
                 if game.profile.graphics == .dxmt {
                     Divider().opacity(0.3)
                     row("Window size", detail: "Sets a borderless window that fits this display on the next launch.") {
                         Button("Reset", action: game.resetDisplay)
+                    }
+                }
+                if game.localLaunch, game.localExecutable != nil {
+                    Divider().opacity(0.3)
+                    row("Working folder", detail: game.workingDirectory.path) {
+                        HStack {
+                            Button("Change…", action: game.chooseWorkingDirectory)
+                            Button("Use EXE folder", action: game.resetWorkingDirectory)
+                        }.disabled(game.sessionRunning)
                     }
                 }
                 Divider().opacity(0.3)
@@ -314,7 +296,7 @@ private struct SettingsSection: View {
                 }
             }
             .modifier(Card())
-            Text("Setting changes apply the next time \(game.launcherName) starts for this game.")
+            Text(game.localLaunch ? "Setting changes apply the next time the game starts." : "Setting changes apply the next time \(game.launcherName) starts for this game.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .padding(.leading, Space.xs)
@@ -324,7 +306,7 @@ private struct SettingsSection: View {
                 }
                 .modifier(Card())
                 .padding(.top, Space.s)
-            } else if game.canRemoveSetup {
+            } else if game.canRemoveSetup && !game.localLaunch {
                 row("Remove setup", detail: "Deletes \(game.launcherName) and the Windows files of \(game.profile.gameEnvironment.title).") {
                     Button("Remove…", role: .destructive, action: game.requestRemoveSetup)
                 }
@@ -360,5 +342,31 @@ private struct SettingsSection: View {
             control()
         }
         .padding(.vertical, Space.m + 2)
+    }
+}
+
+private struct LocalExecutableSection: View {
+    let game: GameModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Space.m) {
+            Text("Game executable").font(.system(size: 15, weight: .semibold))
+            Text(game.localExecutable?.path ?? "Choose the EXE from your installed \(game.profile.title) folder.")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+                .textSelection(.enabled).lineLimit(3).truncationMode(.middle)
+            HStack {
+                Button("Choose EXE…", action: game.chooseExecutable)
+                    .disabled(game.locked || game.sessionRunning)
+                if game.sessionRunning && game.state != .running {
+                    Button("Stop shared session", action: game.requestStop).disabled(game.locked)
+                }
+            }
+            Text("Uses your installed files in the shared \(game.runtime.paths.environment.title) environment. Steam is not installed or started.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Space.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.05)))
     }
 }

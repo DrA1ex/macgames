@@ -4,10 +4,10 @@ import Testing
 
 @Suite struct HiDPITests {
     @Test func olderSettingsAdoptExistingRetinaModeAndKeepAnExplicitChoice() throws {
-        let fixture = try FakeEnvironment(.aoe4)
+        let fixture = try FakeEnvironment(.aoe4, localLaunch: true)
         defer { fixture.cleanUp() }
         let paths = fixture.runtime.paths
-        try write(#"{"optimized":true,"hud":true}"#, to: LaunchSettings.url(paths))
+        try write(#"{"optimized":true,"hud":true,"aoePerformance":true}"#, to: LaunchSettings.url(paths))
         try write(#"""
         WINE REGISTRY Version 2
         [Software\\Wine\\Mac Driver] 123
@@ -23,7 +23,7 @@ import Testing
     }
 
     @Test func toggleChangesReachAnAlreadyConfiguredPrefixInBothDirections() throws {
-        let fixture = try FakeEnvironment(.aoe4)
+        let fixture = try FakeEnvironment(.aoe4, localLaunch: true)
         defer { fixture.cleanUp() }
         let game = fixture.runtime
         let env = game.environment(optimized: false, hud: false)
@@ -45,10 +45,10 @@ import Testing
     }
 
     @Test func defaultsRemainCompatibleAndUserCanOverrideAnExistingGameRecipe() throws {
-        let plain = try FakeEnvironment(.aoe4)
+        let plain = try FakeEnvironment(.aoe4, localLaunch: true)
         defer { plain.cleanUp() }
         #expect(!plain.runtime.environmentSettings.hiDPI)
-        let retinaGame = try FakeEnvironment(.overwatch)
+        let retinaGame = try FakeEnvironment(.overwatch, localLaunch: true)
         defer { retinaGame.cleanUp() }
         #expect(retinaGame.runtime.environmentSettings.hiDPI)
         let values = GameRecipes.ordinaryRegistry(for: retinaGame.runtime.paths.environment)

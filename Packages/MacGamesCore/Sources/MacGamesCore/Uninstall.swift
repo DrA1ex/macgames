@@ -38,6 +38,7 @@ extension GameRuntime {
     /// goes with Steam closed, so Steam cannot write its manifest back; a Battle.net game
     /// goes through Blizzard's own uninstaller.
     public func uninstall() throws {
+        if paths.localLaunch { throw SetupError("External game files are never deleted. Use Choose EXE to change the selection.") }
         if let playing = runningGameTitle() { throw SetupError("Close \(playing) first.") }
         guard !profile.installFolder.isEmpty else { throw SetupError("\(profile.title) has no install folder to delete.") }
         if profile.launch == .battleNet { try uninstallThroughBattleNet(); return }
