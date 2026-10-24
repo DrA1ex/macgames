@@ -144,6 +144,7 @@ public enum GameRecipes {
             let key = #"HKEY_CURRENT_USER\Software\Microsoft\Microsoft Games\Age of Empires III DE"#
             return [R(key: key, name: "IgnoreUnsupportedSystem", value: .string("1")),
                     R(key: key, name: "SystemInitialization", value: .string("1"))]
+        case "aow4": return [R.retinaMode("AOW4.exe")]
         case "witcher3": return [R.windowsVersion("witcher3.exe", "win11")]
         case "heroes3": return [R.windowsVersion("Heroes3.exe", "win11")]
         case "red-alert2":

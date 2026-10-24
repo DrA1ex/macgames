@@ -5,7 +5,8 @@ All notable changes to MacGames are listed here.
 ## Unreleased
 
 - Age of Wonders 4 is supported, on D3DMetal. MacGames starts the game itself and skips the Paradox
-  Launcher, whose window never opens under Wine, and installs the game's Windows runtimes on the first play
+  Launcher, whose window never opens under Wine. The first play installs the game's Windows runtimes,
+  and Wine's Retina mode is on for the game alone, so it draws at the display's full size
 
 ## 0.1.2 - 2026-10-22
 
