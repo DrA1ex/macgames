@@ -38,7 +38,33 @@ import Testing
         f.live()
         try f.runtime.startSteam(.open)
         #expect(!f.calls.contains("wineserver -k"))
-        #expect(!f.calls.contains { $0.hasPrefix("wine reg import") })
+        #expect(f.calls.contains { $0.hasPrefix("wine reg import") }, "ordinary recipes must still update")
+        let data = try Data(contentsOf: f.dir.appendingPathComponent("root/imported.reg"))
+        let registry = try #require(String(data: data.dropFirst(2), encoding: .utf16LittleEndian))
+        #expect(registry.contains("witcher3.exe"), "a real per-executable recipe is applied")
+        #expect(!registry.contains("RetinaMode"), "display changes remain deferred")
+        #expect(read(f.runtime.hiDPIApplied) == nil)
+        let normalMarker = read(f.runtime.paths.root.appendingPathComponent("recipes-applied"))
+        try f.runtime.startSteam(.open)
+        #expect(f.calls.filter { $0.hasPrefix("wine reg import") }.count == 1, "ordinary recipes cache separately from pending HiDPI")
+        try f.runtime.startSteam(.play([]))
+        #expect(read(f.runtime.hiDPIApplied) == "1", "the later restart actually applies the deferred choice")
+        #expect(read(f.runtime.paths.root.appendingPathComponent("recipes-applied")) == normalMarker)
+        let applied = try Data(contentsOf: f.dir.appendingPathComponent("root/imported.reg"))
+        let display = try #require(String(data: applied.dropFirst(2), encoding: .utf16LittleEndian))
+        #expect(display.contains("RetinaMode"))
+        #expect(!display.contains("witcher3.exe"), "already applied ordinary recipes need no second import")
+    }
+
+    @Test func failedImportDoesNotMarkRecipesOrHiDPIAsApplied() throws {
+        let f = try fixture(); defer { f.cleanUp() }
+        try write("#!/bin/sh\nexit 7\n", to: f.runtime.paths.wine)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: f.runtime.paths.wine.path)
+        #expect(throws: (any Error).self) {
+            try f.runtime.ensureRecipes(environment: [:])
+        }
+        #expect(read(f.runtime.hiDPIApplied) == nil)
+        #expect(read(f.runtime.paths.root.appendingPathComponent("recipes-applied")) == nil)
     }
 
     @Test func battleNetAlsoRestartsForHiDPIBeforeStartingClient() throws {
