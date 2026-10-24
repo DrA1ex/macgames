@@ -12,7 +12,9 @@ command -v cmake >/dev/null || { echo "Install CMake (brew install cmake)." >&2;
 WORK="$ROOT/build/aoe-runtime"
 mkdir -p "$WORK"
 KEY="$( { shasum -a 256 "$ARCHIVE" "$ROOT"/patches/x87sidecar/*.patch "$0"; xcrun clang++ --version; } | shasum -a 256 | cut -d' ' -f1)"
-if [ -f "$WORK/source-key" ] && [ "$(cat "$WORK/source-key")" = "$KEY" ] && codesign --verify --strict "$WORK/x87sidecar" 2>/dev/null; then
+if [ -f "$WORK/source-key" ] && [ "$(cat "$WORK/source-key")" = "$KEY" ] \
+   && [ -s "$WORK/sidecar-source-patched.tar.gz" ] \
+   && codesign --verify --strict "$WORK/x87sidecar" 2>/dev/null; then
   printf '%s\n' "$WORK/x87sidecar"
   exit 0
 fi
