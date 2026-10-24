@@ -288,6 +288,11 @@ private struct SettingsSection: View {
                 row("Performance HUD", detail: "Shows the Metal frame rate overlay in the game.") {
                     Toggle("", isOn: $game.settings.hud).labelsHidden().toggleStyle(.switch)
                 }
+                Divider().opacity(0.3)
+                row("HiDPI (Retina)", detail: "Applies to all games in \(game.runtime.paths.environment.title). Restart \(game.launcherName) to apply.") {
+                    Toggle("HiDPI (Retina)", isOn: $game.hiDPI)
+                        .labelsHidden().toggleStyle(.switch)
+                }
                 if game.profile.optimizedExecutableSHA256 != nil {
                     Divider().opacity(0.3)
                     row("Rosetta optimization", detail: "Accelerates x87 math, exception handling and translated-code reuse on the supported AoE IV build. " + game.optimization.detail) {
