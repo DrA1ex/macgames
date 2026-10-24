@@ -314,15 +314,24 @@ public final class GameRuntime: @unchecked Sendable {
 
     /// Brings registry values and sandbox folders of every game in the environment up to date,
     /// including games added after the environment was first set up.
-    func ensureRecipes(environment env: [String: String]) throws {
+    var hiDPIApplied: URL { paths.root.appendingPathComponent("hidpi-applied") }
+
+    func ensureRecipes(environment env: [String: String], applyHiDPI: Bool = true) throws {
         ensureSandbox()
         let marker = paths.root.appendingPathComponent("recipes-applied")
+        let wanted = GameRecipes.recipeHash(for: paths.environment, root: paths.root)
+        let recipesChanged = (try? String(contentsOf: marker, encoding: .utf8)) != wanted
+        var registry = recipesChanged ? GameRecipes.ordinaryRegistry(for: paths.environment) : []
+
         let hiDPI = environmentSettings.hiDPI
-        let wanted = GameRecipes.recipeHash(for: paths.environment, root: paths.root, hiDPI: hiDPI)
-        guard (try? String(contentsOf: marker, encoding: .utf8)) != wanted else { return }
-        let registry = GameRecipes.registry(for: paths.environment, hiDPI: hiDPI)
+        let wantedHiDPI = hiDPI ? "1" : "0"
+        let hiDPIChanged = applyHiDPI && (try? String(contentsOf: hiDPIApplied, encoding: .utf8)) != wantedHiDPI
+        if hiDPIChanged { registry.append(WineHiDPI.registryValue(hiDPI)) }
         if !registry.isEmpty { try importRegistry(registry, environment: env) }
-        try wanted.write(to: marker, atomically: true, encoding: .utf8)
+        // Only mark values after import succeeds. A deferred RetinaMode must
+        // not be mistaken for applied just because ordinary recipes updated.
+        if recipesChanged { try wanted.write(to: marker, atomically: true, encoding: .utf8) }
+        if hiDPIChanged { try wantedHiDPI.write(to: hiDPIApplied, atomically: true, encoding: .utf8) }
     }
 
     /// A process that joins a running session must use the server's sync settings.
@@ -363,10 +372,9 @@ public final class GameRuntime: @unchecked Sendable {
             running = false
         }
 
-        // Opening an existing client must not silently change its display mode.
-        // Play/background already restart a changed session above, after checking
-        // that no game would be interrupted.
-        if !running { try ensureRecipes(environment: environment(optimized: false, hud: false)) }
+        // Ordinary recipes still reach an existing Steam. Only RetinaMode
+        // waits for a new session, after the restart and running-game guard.
+        try ensureRecipes(environment: environment(optimized: false, hud: false), applyHiDPI: !running)
 
         let log = paths.logs.appendingPathComponent("steam-session.log")
         try fm.createDirectory(at: paths.logs, withIntermediateDirectories: true)

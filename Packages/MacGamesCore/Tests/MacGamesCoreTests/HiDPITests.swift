@@ -51,9 +51,8 @@ import Testing
         let retinaGame = try FakeEnvironment(.overwatch, localLaunch: true)
         defer { retinaGame.cleanUp() }
         #expect(retinaGame.runtime.environmentSettings.hiDPI)
-        let values = GameRecipes.registry(for: retinaGame.runtime.paths.environment, hiDPI: false)
-            .filter { $0.key == WineHiDPI.key && $0.name == "RetinaMode" }
-        #expect(values == [WineHiDPI.registryValue(false)])
+        let values = GameRecipes.ordinaryRegistry(for: retinaGame.runtime.paths.environment)
+        #expect(!values.contains(where: WineHiDPI.isRetinaMode), "even the Overwatch default must stay out of ordinary recipes")
         try write(#"""
         [Unrelated]
         "RetinaMode"="Y"
