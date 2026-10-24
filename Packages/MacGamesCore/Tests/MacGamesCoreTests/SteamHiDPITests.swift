@@ -6,10 +6,11 @@ import Testing
     func fixture() throws -> FakeEnvironment {
         let fixture = try FakeEnvironment(.cs2)
         try fixture.installSteam()
-        fixture.runtime.settings = LaunchSettings(optimized: false, hiDPI: false)
+        fixture.runtime.settings = LaunchSettings(optimized: false)
+        try EnvironmentSettings(hiDPI: false).save(to: fixture.runtime.paths)
         let env = try fixture.runtime.launchEnvironment()
         try SteamSession.begin(fingerprint: SteamLaunch.fingerprint(env), paths: fixture.runtime.paths, environment: env)
-        fixture.runtime.settings = LaunchSettings(optimized: false, hiDPI: true)
+        try EnvironmentSettings(hiDPI: true).save(to: fixture.runtime.paths)
         return fixture
     }
 
@@ -44,7 +45,8 @@ import Testing
         let f = try FakeEnvironment(.diablo4BattleNet); defer { f.cleanUp() }
         try write("", to: f.runtime.paths.battleNetExe)
         try write("0", to: f.runtime.sessionHiDPI)
-        f.runtime.settings = LaunchSettings(optimized: false, hiDPI: true)
+        f.runtime.settings = LaunchSettings(optimized: false)
+        try EnvironmentSettings(hiDPI: true).save(to: f.runtime.paths)
         f.live(["Battle.net.exe"])
         try f.runtime.openBattleNet(play: true)
         let stop = try #require(f.calls.firstIndex(of: "wineserver -k"))
@@ -58,7 +60,8 @@ import Testing
         let f = try FakeEnvironment(.diablo4BattleNet); defer { f.cleanUp() }
         try write("", to: f.runtime.paths.battleNetExe)
         try write("0", to: f.runtime.sessionHiDPI)
-        f.runtime.settings = LaunchSettings(optimized: false, hiDPI: true)
+        f.runtime.settings = LaunchSettings(optimized: false)
+        try EnvironmentSettings(hiDPI: true).save(to: f.runtime.paths)
         f.live(["Battle.net.exe", f.runtime.profile.executableName])
         #expect(throws: SetupError.self) { try f.runtime.openBattleNet(play: true) }
         #expect(!f.calls.contains("wineserver -k"))

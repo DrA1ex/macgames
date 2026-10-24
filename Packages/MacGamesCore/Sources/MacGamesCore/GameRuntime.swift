@@ -54,6 +54,8 @@ public final class GameRuntime: @unchecked Sendable {
         set { try? newValue.save(to: paths) }
     }
 
+    public var environmentSettings: EnvironmentSettings { EnvironmentSettings.load(from: paths) }
+
     public func environment(optimized: Bool, hud: Bool) -> [String: String] {
         WineEnvironment.make(profile: profile, paths: paths, inherited: ProcessInfo.processInfo.environment,
                              optimized: optimized, hud: hud, bridge: runtime.bridge)
@@ -79,7 +81,7 @@ public final class GameRuntime: @unchecked Sendable {
         }
         // Included in Steam's managed fingerprint so a changed display mode
         // restarts the session before the registry recipe is applied.
-        env["MACGAMES_HIDPI"] = s.hiDPI == true ? "1" : "0"
+        env["MACGAMES_HIDPI"] = environmentSettings.hiDPI ? "1" : "0"
         return env
     }
 
@@ -275,7 +277,7 @@ public final class GameRuntime: @unchecked Sendable {
     func ensureRecipes(environment env: [String: String]) throws {
         ensureSandbox()
         let marker = paths.root.appendingPathComponent("recipes-applied")
-        let hiDPI = settings.hiDPI
+        let hiDPI = environmentSettings.hiDPI
         let wanted = GameRecipes.recipeHash(for: paths.environment, root: paths.root, hiDPI: hiDPI)
         guard (try? String(contentsOf: marker, encoding: .utf8)) != wanted else { return }
         let registry = GameRecipes.registry(for: paths.environment, hiDPI: hiDPI)
@@ -523,7 +525,7 @@ extension GameRuntime {
             GameRecipes.registry(for: $0).contains(WineHiDPI.registryValue(true))
         }
         let previous = recorded ?? WineHiDPI.currentValue(in: paths.prefix) ?? recipeDefault
-        return previous != (settings.hiDPI == true)
+        return previous != (environmentSettings.hiDPI)
     }
 
     /// Opens Battle.net. With `play`, Battle.net also starts the game, for games with a product code.
@@ -570,7 +572,7 @@ extension GameRuntime {
             try prepareOverwatch()
         }
         try startDetached(client, environment: try launchEnvironment(), workingDirectory: folder, log: "battlenet-session.log")
-        try (settings.hiDPI == true ? "1" : "0").write(to: sessionHiDPI, atomically: true, encoding: .utf8)
+        try (environmentSettings.hiDPI ? "1" : "0").write(to: sessionHiDPI, atomically: true, encoding: .utf8)
         if profile.id == "overwatch", let displays = displaySignature() {
             try? Data(displays.utf8).write(to: sessionDisplays, options: .atomic)
         }
