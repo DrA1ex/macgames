@@ -3,6 +3,11 @@ import Foundation
 enum WineHiDPI {
     static let key = #"HKEY_CURRENT_USER\Software\Wine\Mac Driver"#
 
+    static func isRetinaMode(_ value: RegistryValue) -> Bool {
+        value.key.caseInsensitiveCompare(key) == .orderedSame &&
+            value.name.caseInsensitiveCompare("RetinaMode") == .orderedSame
+    }
+
     static func registryValue(_ enabled: Bool) -> RegistryValue {
         RegistryValue(key: key, name: "RetinaMode", value: .string(enabled ? "Y" : "N"))
     }
