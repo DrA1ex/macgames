@@ -9,6 +9,7 @@ public struct EnvironmentSettings: Codable, Sendable, Equatable {
     static func url(_ paths: GamePaths) -> URL { paths.root.appendingPathComponent("environment-settings.json") }
 
     public static func load(from paths: GamePaths) -> EnvironmentSettings {
+        if paths.environment.requiresHiDPI { return Self(hiDPI: true) }
         if let data = try? Data(contentsOf: url(paths)),
            let saved = try? JSONDecoder().decode(Self.self, from: data) { return saved }
 
@@ -22,14 +23,20 @@ public struct EnvironmentSettings: Codable, Sendable, Equatable {
             return (try? JSONDecoder().decode(Legacy.self, from: data))?.hiDPI
         })
         if choices.count == 1, let choice = choices.first { return Self(hiDPI: choice) }
-        let fallback = paths.environment.games.contains {
-            GameRecipes.registry(for: $0).contains(WineHiDPI.registryValue(true))
-        }
-        return Self(hiDPI: WineHiDPI.currentValue(in: paths.prefix) ?? fallback)
+        return Self(hiDPI: WineHiDPI.currentValue(in: paths.prefix) ?? false)
     }
 
     public func save(to paths: GamePaths) throws {
         try FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
         try JSONEncoder().encode(self).write(to: Self.url(paths), options: .atomic)
+    }
+}
+
+extension GameEnvironment {
+    /// A game here sets RetinaMode for the whole prefix in its own recipe, so HiDPI is fixed on.
+    /// Overwatch does: Recall's DXMT fullscreen canvas assumes Wine sees the display at twice
+    /// its size in points, and its resolution fitting relies on that.
+    public var requiresHiDPI: Bool {
+        games.contains { GameRecipes.registry(for: $0).contains(WineHiDPI.registryValue(true)) }
     }
 }

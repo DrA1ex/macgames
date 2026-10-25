@@ -44,22 +44,37 @@ import Testing
         #expect(fixture.calls.filter { $0.hasPrefix("wine reg import") }.count == 2)
     }
 
-    @Test func defaultsRemainCompatibleAndUserCanOverrideAnExistingGameRecipe() throws {
+    @Test func defaultsRemainCompatibleAndOverwatchKeepsHiDPIOn() throws {
         let plain = try FakeEnvironment(.aoe4)
         defer { plain.cleanUp() }
         #expect(!plain.runtime.environmentSettings.hiDPI)
+        #expect(!plain.runtime.paths.environment.requiresHiDPI)
         let retinaGame = try FakeEnvironment(.overwatch)
         defer { retinaGame.cleanUp() }
+        #expect(retinaGame.runtime.paths.environment.requiresHiDPI)
         #expect(retinaGame.runtime.environmentSettings.hiDPI)
         let values = GameRecipes.ordinaryRegistry(for: retinaGame.runtime.paths.environment)
         #expect(!values.contains(where: WineHiDPI.isRetinaMode), "even the Overwatch default must stay out of ordinary recipes")
+        // Recall's DXMT canvas and the resolution fitting assume Retina, so neither an older
+        // prefix value nor a saved choice turns it off.
         try write(#"""
         [Unrelated]
         "RetinaMode"="Y"
         [Software\\Wine\\Mac Driver] 123
         "RetinaMode"="N"
         """#, to: retinaGame.runtime.paths.prefix.appendingPathComponent("user.reg"))
-        #expect(!retinaGame.runtime.environmentSettings.hiDPI)
+        try EnvironmentSettings(hiDPI: false).save(to: retinaGame.runtime.paths)
+        #expect(retinaGame.runtime.environmentSettings.hiDPI)
+        retinaGame.runtime.settings = LaunchSettings(optimized: false)
+        #expect(try retinaGame.runtime.launchEnvironment()["MACGAMES_HIDPI"] == "1")
+    }
+
+    @Test func onlyAnEnvironmentWhoseRecipeSetsPrefixWideRetinaRequiresHiDPI() {
+        let required = GameEnvironment.all.filter(\.requiresHiDPI).map(\.id)
+        #expect(required == ["overwatch"])
+        // Age of Wonders 4 sets RetinaMode for its own executable only, which leaves the Steam library free.
+        #expect(GameRecipes.registry(for: .aow4).contains { $0.name == "RetinaMode" })
+        #expect(!GameEnvironment.steam.requiresHiDPI)
     }
 
     @Test func gamesSharingAPrefixReadOnePreferenceAndGameSettingsCannotResetIt() throws {
