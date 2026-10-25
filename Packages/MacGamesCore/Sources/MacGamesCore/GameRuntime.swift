@@ -98,10 +98,38 @@ public final class GameRuntime: @unchecked Sendable {
         if optimized, composed, profile.id == "aoe4" {
             env["MACGAMES_AOE_COMBINED"] = "1"
         }
+        if optimized, composed, paths.localLaunch, profile.id == "aoe2", s.exceptionHandling,
+           let pin = profile.optimizedExecutableSHA256 {
+            // This build's executable sections (.text and .rodata), never AoE IV's range.
+            // Bridge re-hashes the EXE immediately before starting the sidecar.
+            env["MACGAMES_X87_MODE"] = "aoe-performance"
+            env["MACGAMES_OPTIMIZED_SHA256"] = pin
+            env["AOELAB_SOFTFAULT_BRIDGE"] = "1"
+            env["AOE_SOFTFAULT_PC"] = "0x140001000"
+            env["AOE_SOFTFAULT_END"] = "0x143197790"
+            env["AOE_SOFTFAULT_TARGET1"] = "0x180000000"
+            env["AOE_SOFTFAULT_TARGET"] = "0x180000010"
+            // Only a separately prepared AoE II engine may enable its own ring
+            // pointer. A stock engine or stale marker keeps the cache disabled.
+            let marker = paths.engine.appendingPathComponent(".macgames-aoe2-fragment-cache")
+            let native = paths.engine.appendingPathComponent("lib/wine/x86_64-unix/ntdll.so")
+            if let fields = try? String(contentsOf: marker, encoding: .utf8).split(whereSeparator: \.isNewline),
+               fields.count == 2, fields[0] == "1", fields[1].count == 64,
+               let actual = try? sha256Hex(ofFileAt: native), actual == fields[1] {
+                env["AOELAB_CODE_CACHE_GAME"] = "1"
+                env["AOELAB_CODE_CACHE_AOE2"] = "1"
+            }
+        }
         env["MACGAMES_HIDPI"] = environmentSettings.hiDPI ? "1" : "0"
         if let performanceDirectory {
             try fm.createDirectory(at: performanceDirectory, withIntermediateDirectories: true)
             env.merge(PerformanceRecording.environment(output: performanceDirectory)) { $1 }
+            if profile.id == "aoe2", env["AOELAB_CODE_CACHE_AOE2"] == "1" {
+                // Native cache counters are small atomics; do not enable the
+                // separately opt-in guest sampler or x87 instruction profiling.
+                env["AOELAB_COUNTERS_DIR"] = performanceDirectory.path
+                env["MACGAMES_DIAGNOSTICS_DIR"] = performanceDirectory.path
+            }
         }
         if let diagnosticDirectory, ["generic", "aoe-performance"].contains(env["MACGAMES_X87_MODE"] ?? "") {
             try fm.createDirectory(at: diagnosticDirectory, withIntermediateDirectories: true)

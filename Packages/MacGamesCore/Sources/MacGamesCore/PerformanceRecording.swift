@@ -28,7 +28,9 @@ extension GameRuntime {
             $0.argv0?.replacingOccurrences(of: "\\", with: "/").split(separator: "/").last?.lowercased() == name
         }) else { throw SetupError("The game started, but its process could not be found for recording.") }
         let metadata: [String: Any] = ["game": profile.id, "pid": entry.pid, "started": Date().timeIntervalSince1970,
-                                       "optimized": settings.optimized, "wineSync": "MSync", "graphics": String(describing: profile.graphics),
+                                       "optimized": settings.optimized, "exceptionHandling": settings.exceptionHandling,
+                                       "executableSHA256": (try? sha256Hex(ofFileAt: paths.gameExe)) ?? "unreadable",
+                                       "wineSync": "MSync", "graphics": String(describing: profile.graphics),
                                        "executable": paths.gameExe.path, "workingDirectory": paths.workingDirectory.path]
         try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
             .write(to: output.appendingPathComponent("launch.json"))

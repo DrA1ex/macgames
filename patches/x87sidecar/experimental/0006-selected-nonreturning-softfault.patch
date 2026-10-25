@@ -1,0 +1,43 @@
+--- a/rosetta_loader/src/stub_asm.cpp
++++ b/rosetta_loader/src/stub_asm.cpp
+@@ -1054,6 +1054,10 @@
+     if (displacement < INT32_MIN || displacement > INT32_MAX) return b;
+     if(end && (end<=pc || !target1 || end-pc>0x6000000ULL))return b;
+     if(end){for(uint64_t t:{target,target1})for(uint64_t a:{pc,end}){int64_t d=(int64_t)t-(int64_t)a-5;if(d<INT32_MIN||d>INT32_MAX)return b;}}
++    const bool selection_jump = std::getenv("LOCAL_AOE_SELECTION_JUMP") &&
++        !std::strcmp(std::getenv("LOCAL_AOE_SELECTION_JUMP"),"1") &&
++        pc == 0x140001000ULL && end == 0x143197790ULL &&
++        target1 == 0x180000000ULL && target == 0x180000010ULL;
+     auto& h=b.handler;
+     std::map<std::string,size_t> labels;
+     struct Fix { size_t pos; std::string label; int kind; unsigned cond; };
+@@ -1082,9 +1086,27 @@
+     label("two");ins(add_imm(14,13,2));ins(cmp_reg_x(14,11));branch("done",2,COND_HI);
+     if(!end){ins(ldrh_w_offset(9,13,0));ins(movz(14,0x7fd5,0));ins(cmp_reg_w(9,14));branch("done",2,COND_NE);}
+     ins(movz(14,2,0));constant(9,target);
+-    label("selected");ins(str_x_offset(14,SP,88));ins(add_reg_x(14,13,14));ins(sub_reg_x(9,9,14));ins(str_w_offset(9,SP,80));
++    label("selected");ins(str_x_offset(14,SP,88));
++    if (selection_jump) {
++        unsigned index = 0;
++        for (uint64_t site : {0x140f77b90ULL,0x140f77dd3ULL,0x140f77e10ULL,0x140f77e3cULL}) {
++            constant(15,site);ins(cmp_reg_x(13,15));
++            const std::string next = "jump_site_next_" + std::to_string(index);
++            branch(next.c_str(),2,COND_NE);
++            constant(9,0x180000100ULL + index * 32);
++            branch("jump_selected",0);
++            label(next.c_str()); ++index;
++        }
++        branch("call_selected",0);
++        label("jump_selected");ins(movz(15,0xe9,0));branch("transfer_selected",0);
++        label("call_selected");ins(movz(15,0xe8,0));
++        label("transfer_selected");ins(str_w_offset(15,SP,72));
++    }
++    ins(add_reg_x(14,13,14));ins(sub_reg_x(9,9,14));ins(str_w_offset(9,SP,80));
+     ins(str_x_offset(10,SP,40));ins(str_x_offset(11,SP,48));ins(str_x_offset(13,SP,56));
+-    ins(add_imm(15,SP,64));ins(movz(9,0xe8,0));ins(strb_w_offset(9,15,0));
++    ins(add_imm(15,SP,64));
++    if(selection_jump)ins(ldr_w_offset(9,SP,72));else ins(movz(9,0xe8,0));
++    ins(strb_w_offset(9,15,0));
+     ins(ldr_w_offset(9,SP,80));ins(add_imm(16,15,1));ins(str_w_offset(9,16,0));
+     ins(str_x_offset(15,12,kDecoderCtxCodeBase));ins(add_imm(9,15,5));ins(str_x_offset(9,12,kDecoderCtxCodeEnd));
+     ins(ldr_x_offset(0,SP,0));ins(movz(1,0,0));ins(ldp_offset(2,3,SP,16));branch("stock",1);

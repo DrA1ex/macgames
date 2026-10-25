@@ -33,7 +33,7 @@ import Testing
     }
 
     @Test func eachEnvironmentListsOnlyItsGames() {
-        #expect(GameEnvironment.steam.games.count == 13)
+        #expect(GameEnvironment.steam.games.count == 14)
         #expect(GameEnvironment.all.flatMap(\.games).count == GameProfile.all.count)
         #expect(GameEnvironment.all.allSatisfy { !$0.games.isEmpty })
     }

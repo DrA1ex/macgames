@@ -1,4 +1,4 @@
-Vendor/
+/Vendor
 build/
 DerivedData/
 .build/

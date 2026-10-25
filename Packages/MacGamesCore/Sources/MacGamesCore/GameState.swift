@@ -38,10 +38,23 @@ public struct LaunchSettings: Codable, Sendable, Equatable {
     public var optimized: Bool
     /// Show the Metal performance HUD.
     public var hud: Bool
+    /// Experimental bounded software exceptions for the pinned AoE II DE build.
+    /// Only used together with x87 optimization; off for existing settings.
+    public var exceptionHandling: Bool
 
-    public init(optimized: Bool = true, hud: Bool = false) {
+    public init(optimized: Bool = true, hud: Bool = false, exceptionHandling: Bool = false) {
         self.optimized = optimized
         self.hud = hud
+        self.exceptionHandling = exceptionHandling
+    }
+
+    enum CodingKeys: String, CodingKey { case optimized, hud, exceptionHandling }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        optimized = try values.decode(Bool.self, forKey: .optimized)
+        hud = try values.decode(Bool.self, forKey: .hud)
+        exceptionHandling = try values.decodeIfPresent(Bool.self, forKey: .exceptionHandling) ?? false
     }
 
     static func url(_ paths: GamePaths) -> URL { paths.gameData.appendingPathComponent("settings.json") }

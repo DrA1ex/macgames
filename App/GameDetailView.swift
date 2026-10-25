@@ -268,8 +268,17 @@ private struct SettingsSection: View {
                 }
                 if game.profile.optimizedExecutableSHA256 != nil {
                     Divider().opacity(0.3)
-                    row("Rosetta optimization", detail: "Accelerates x87 math, exception handling and translated-code reuse on the supported AoE IV build.", status: game.optimization.detail) {
+                    row("Rosetta optimization", detail: game.profile.id == "aoe2"
+                        ? "Uses the x87 math translator. Restart the game to compare frame pacing."
+                        : "Accelerates x87 math, exception handling and translated-code reuse on the supported AoE IV build.", status: game.optimization.detail) {
                         Toggle("Rosetta optimization", isOn: $game.settings.optimized).labelsHidden().toggleStyle(.switch)
+                    }
+                }
+                if game.profile.id == "aoe2" {
+                    Divider().opacity(0.3)
+                    row("Exception handling (experimental)", detail: "Tests faster exception delivery on the supported AoE II build. Requires Rosetta optimization; other builds use x87 only. Restart to apply.") {
+                        Toggle("Exception handling", isOn: $game.settings.exceptionHandling)
+                            .labelsHidden().toggleStyle(.switch).disabled(!game.settings.optimized)
                     }
                 }
                 if game.profile.graphics == .dxmt {

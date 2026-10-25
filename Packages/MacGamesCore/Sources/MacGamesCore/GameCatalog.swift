@@ -5,6 +5,12 @@ import Foundation
 extension GameProfile {
     static func p(_ x: Double, _ y: Double) -> Presentation.Point { .init(x: x, y: y) }
 
+    public static let aoe2 = GameProfile(
+        id: "aoe2", title: "Age of Empires II: Definitive Edition", steamAppID: "813780",
+        installFolder: "AoE2DE", executableRelativePath: "AoE2DE_s.exe",
+        optimizedExecutableSHA256: "124744bf4ae0d3856238e00d61fe321d47fcd3c0d7dfcd175c6c76aa9fb458ff",
+        presentation: Presentation(accentHex: "B99545", heroFocus: p(0.5, 0.4)))
+
     public static let aoe4 = GameProfile(
         id: "aoe4", title: "Age of Empires IV", steamAppID: "1466860",
         installFolder: "Age of Empires IV", executableRelativePath: "RelicCardinal.exe",
@@ -114,7 +120,7 @@ extension GameProfile {
         presentation: Presentation(accentHex: "2E8B57", heroFocus: p(0.6, 0.4)))
 
     public static let all: [GameProfile] = [
-        .aoe4, .cs2, .aoe3, .aomRetold, .coh3, .zeroHour, .redAlert2, .heroes3,
+        .aoe4, .aoe2, .cs2, .aoe3, .aomRetold, .coh3, .zeroHour, .redAlert2, .heroes3,
         .diablo4, .poe2, .hogwarts, .witcher3, .eldenRing,
         .skyrim, .overwatch, .diablo4BattleNet, .diablo2Resurrected, .rdr2, .sanAndreas, .gta5,
     ]

@@ -7,7 +7,7 @@ import MacGamesCore
 enum CLI {
     static let usage = """
     usage: MacGames --command <check|setup|launcher|install|play|record-performance|stop|uninstall|remove-setup|status|reset-display|settings>
-                    --game <id> [--root <data root>] [--optimized on|off] [--hud on|off] [--hidpi on|off] [--local-exe /path/to/game.exe | --local] [--profile /diagnostic/folder]
+                    --game <id> [--root <data root>] [--optimized on|off] [--exceptions on|off] [--hud on|off] [--hidpi on|off] [--local-exe /path/to/game.exe | --local] [--profile /diagnostic/folder]
     games: \(GameProfile.all.map(\.id).joined(separator: ", "))
     """
 
@@ -67,10 +67,11 @@ enum CLI {
             case "settings":
                 var s = game.settings
                 if let v = value("--optimized", in: args) { s.optimized = v == "on" }
+                if let v = value("--exceptions", in: args) { s.exceptionHandling = v == "on" }
                 if let v = value("--hud", in: args) { s.hud = v == "on" }
                 if let v = value("--hidpi", in: args) { try EnvironmentSettings(hiDPI: v == "on").save(to: game.paths) }
                 game.settings = s
-                print("optimized: \(s.optimized), hud: \(s.hud), hiDPI: \(game.environmentSettings.hiDPI)")
+                print("optimized: \(s.optimized), exceptions: \(s.exceptionHandling), hud: \(s.hud), hiDPI: \(game.environmentSettings.hiDPI)")
             default:
                 FileHandle.standardError.write(Data((usage + "\n").utf8))
                 return 64
