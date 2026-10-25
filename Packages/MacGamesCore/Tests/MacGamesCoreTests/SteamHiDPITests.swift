@@ -3,6 +3,17 @@ import Testing
 @testable import MacGamesCore
 
 @Suite(.serialized) struct SteamHiDPITests {
+    /// The prefix-wide RetinaMode line in an imported .reg file. A per-executable AppDefaults
+    /// value, such as Age of Wonders 4's, is an ordinary recipe and does not count.
+    func prefixWideRetinaMode(in registry: String) -> String? {
+        var inSection = false
+        for line in registry.components(separatedBy: "\n") {
+            if line.hasPrefix("[") { inSection = line == "[\(WineHiDPI.key)]"; continue }
+            if inSection, line.hasPrefix("\"RetinaMode\"=") { return line }
+        }
+        return nil
+    }
+
     func fixture() throws -> FakeEnvironment {
         let fixture = try FakeEnvironment(.cs2)
         try fixture.installSteam()
@@ -42,7 +53,7 @@ import Testing
         let data = try Data(contentsOf: f.dir.appendingPathComponent("root/imported.reg"))
         let registry = try #require(String(data: data.dropFirst(2), encoding: .utf16LittleEndian))
         #expect(registry.contains("witcher3.exe"), "a real per-executable recipe is applied")
-        #expect(!registry.contains("RetinaMode"), "display changes remain deferred")
+        #expect(prefixWideRetinaMode(in: registry) == nil, "display changes remain deferred")
         #expect(read(f.runtime.hiDPIApplied) == nil)
         let normalMarker = read(f.runtime.paths.root.appendingPathComponent("recipes-applied"))
         try f.runtime.startSteam(.open)
@@ -52,7 +63,7 @@ import Testing
         #expect(read(f.runtime.paths.root.appendingPathComponent("recipes-applied")) == normalMarker)
         let applied = try Data(contentsOf: f.dir.appendingPathComponent("root/imported.reg"))
         let display = try #require(String(data: applied.dropFirst(2), encoding: .utf16LittleEndian))
-        #expect(display.contains("RetinaMode"))
+        #expect(prefixWideRetinaMode(in: display) == "\"RetinaMode\"=\"Y\"")
         #expect(!display.contains("witcher3.exe"), "already applied ordinary recipes need no second import")
     }
 
