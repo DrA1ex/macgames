@@ -74,15 +74,20 @@ ditto "$BIN/MacGamesBridge" "$BUNDLE/Contents/Helpers/MacGamesBridge"
 ditto "$BIN/PerformanceRecorder" "$BUNDLE/Contents/Helpers/PerformanceRecorder"
 xcrun clang -arch x86_64 -mmacosx-version-min=26.0 "$ROOT/Probe/rosetta-probe.c" -o "$BUNDLE/Contents/Helpers/RosettaProbe"
 codesign --force --sign - "$BUNDLE/Contents/Helpers/RosettaProbe"
-/usr/bin/python3 - "$BUNDLE/Contents/Info.plist" <<'PY'
-import plistlib, sys
+/usr/bin/python3 - "$BUNDLE/Contents/Info.plist" "$ROOT/project.yml" "$(git -C "$ROOT" rev-parse HEAD)" <<'PY'
+import plistlib, re, sys
+from pathlib import Path
+project = Path(sys.argv[2]).read_text()
+version = re.search(r'MARKETING_VERSION: "([^"]+)"', project).group(1)
+build = re.search(r'CURRENT_PROJECT_VERSION: "([^"]+)"', project).group(1)
 with open(sys.argv[1], 'wb') as f:
     plistlib.dump({
         'CFBundleIdentifier': 'com.dra1ex.macgames.local',
         'CFBundleExecutable': 'MacGames', 'CFBundleName': 'MacGames Local',
         'CFBundleDisplayName': 'MacGames Local', 'CFBundleIconFile': 'AppIcon',
-        'CFBundlePackageType': 'APPL', 'CFBundleVersion': '1',
-        'CFBundleShortVersionString': '0.1.1-local', 'LSMinimumSystemVersion': '26.0',
+        'CFBundlePackageType': 'APPL', 'CFBundleVersion': build,
+        'CFBundleShortVersionString': version + '-local', 'MacGamesSourceRevision': sys.argv[3],
+        'LSMinimumSystemVersion': '26.0',
         'NSHighResolutionCapable': True,
         'NSMicrophoneUsageDescription': 'Allow microphone access for in-game voice chat.'
     }, f)
