@@ -298,7 +298,9 @@ private struct SettingsSection: View {
                 }
                 if game.profile.optimizedExecutableSHA256 != nil {
                     Divider().opacity(0.3)
-                    row("Rosetta optimization", detail: "Accelerates x87 math, exception handling and translated-code reuse on the supported AoE IV build.", status: game.optimization.detail) {
+                    row("Rosetta optimization", detail: game.profile.id == "aoe2"
+                        ? "Accelerates x87 math and reduces selection stutter on the supported AoE II build."
+                        : "Accelerates x87 math, exception handling and translated-code reuse on the supported AoE IV build.", status: game.optimization.detail) {
                         Toggle("", isOn: $game.settings.optimized).labelsHidden().toggleStyle(.switch)
                     }
                 }

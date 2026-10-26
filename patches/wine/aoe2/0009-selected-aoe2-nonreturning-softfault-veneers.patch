@@ -1,0 +1,26 @@
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -2067,6 +2067,23 @@
+             memset(entry+2,0,4);memcpy(entry+6,&targets[i],8);
+             entry[14]=entry[15]=0xcc;
+         }
++        /* A JMP through a veneer has the stack effect of the existing
++         * one-byte CALL bridge, without advertising a fallthrough return.
++         * These four sites belong to the separately pinned AoE II build. */
++        {
++            static const ULONG64 sites[] = {0x140f77b90ULL,0x140f77dd3ULL,0x140f77e10ULL,0x140f77e3cULL};
++            for (i = 0; i < ARRAY_SIZE(sites); ++i)
++            {
++                BYTE *entry = (BYTE *)bridge + 0x100 + i * 32;
++                ULONG64 return_pc = sites[i] + 1;
++                INT32 displacement = (BYTE *)bridge - (entry + 11);
++                memset(entry, 0xcc, 32);
++                entry[0] = 0xff; entry[1] = 0x35;
++                entry[2] = 18; memset(entry + 3, 0, 3);
++                entry[6] = 0xe9; memcpy(entry + 7, &displacement, 4);
++                memcpy(entry + 24, &return_pc, 8);
++            }
++        }
+         status = NtProtectVirtualMemory(GetCurrentProcess(),&bridge,&bridge_size,PAGE_EXECUTE_READ,&old_protect);
+         if (status) fatal_error("cannot protect software fault bridge (%x)\n",status);
+     }

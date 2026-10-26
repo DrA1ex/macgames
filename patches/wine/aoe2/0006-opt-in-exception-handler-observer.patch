@@ -1,0 +1,86 @@
+--- a/dlls/ntdll/exception.c
++++ b/dlls/ntdll/exception.c
+@@ -58,6 +58,29 @@
+ static RTL_CRITICAL_SECTION vectored_handlers_section = { &critsect_debug, -1, 0, 0, 0, 0 };
+ 
+ static PRTL_EXCEPTION_FILTER unhandled_exception_filter;
++
++/* Diagnostic-only observer. No observer is installed by default. It sees
++ * the existing dispatch, never replaces a handler or changes its result.
++ * The registering module must remain loaded until process termination. */
++typedef ULONGLONG (WINAPI *aoe_exception_observer)(ULONG phase, ULONG_PTR pc,
++        EXCEPTION_RECORD *rec, CONTEXT *context, void *handler, LONG result, ULONGLONG token);
++static void *volatile aoe_observer;
++
++void *WINAPI __wine_aoe_set_exception_observer( void *observer )
++{
++    return InterlockedExchangePointer( &aoe_observer, observer );
++}
++
++static ULONGLONG aoe_notify( aoe_exception_observer observer, ULONG phase, ULONG_PTR pc,
++        EXCEPTION_RECORD *rec, CONTEXT *context, void *handler, LONG result, ULONGLONG token )
++{
++    ULONG error = NtCurrentTeb()->LastErrorValue;
++    NTSTATUS status = NtCurrentTeb()->LastStatusValue;
++    ULONGLONG ret = observer( phase, pc, rec, context, handler, result, token );
++    NtCurrentTeb()->LastErrorValue = error;
++    NtCurrentTeb()->LastStatusValue = status;
++    return ret;
++}
+ 
+ static const char *debugstr_exception_code( DWORD code )
+ {
+@@ -151,6 +174,9 @@
+     EXCEPTION_POINTERS except_ptrs;
+     PVECTORED_EXCEPTION_HANDLER func;
+     VECTORED_HANDLER *handler, *to_free = NULL;
++    aoe_exception_observer observer;
++    ULONGLONG token;
++    ULONG_PTR original_pc = (ULONG_PTR)rec->ExceptionAddress;
+ 
+     except_ptrs.ExceptionRecord = rec;
+     except_ptrs.ContextRecord = context;
+@@ -168,7 +194,11 @@
+ 
+         TRACE( "calling handler at %p code=%lx flags=%lx\n",
+                func, rec->ExceptionCode, rec->ExceptionFlags );
++        observer = rec->ExceptionCode == EXCEPTION_ILLEGAL_INSTRUCTION ?
++                InterlockedCompareExchangePointer( &aoe_observer, NULL, NULL ) : NULL;
++        token = observer ? aoe_notify( observer, 1, original_pc, rec, context, func, 0, 0 ) : 0;
+         ret = func( &except_ptrs );
++        if (observer) aoe_notify( observer, 2, original_pc, rec, context, func, ret, token );
+         TRACE( "handler at %p returned %lx\n", func, ret );
+ 
+         RtlEnterCriticalSection( &vectored_handlers_section );
+@@ -193,6 +223,10 @@
+ {
+     NTSTATUS status;
+     DWORD i;
++    LONG vectored_result;
++    aoe_exception_observer observer;
++    ULONGLONG token;
++    ULONG_PTR original_pc = (ULONG_PTR)rec->ExceptionAddress;
+ 
+     switch (rec->ExceptionCode)
+     {
+@@ -246,7 +280,12 @@
+         TRACE( " info[%ld]=%p\n", i, (void *)rec->ExceptionInformation[i] );
+     TRACE_CONTEXT( context );
+ 
+-    if (call_vectored_handlers( rec, context ) == EXCEPTION_CONTINUE_EXECUTION)
++    observer = rec->ExceptionCode == EXCEPTION_ILLEGAL_INSTRUCTION ?
++            InterlockedCompareExchangePointer( &aoe_observer, NULL, NULL ) : NULL;
++    token = observer ? aoe_notify( observer, 3, original_pc, rec, context, NULL, 0, 0 ) : 0;
++    vectored_result = call_vectored_handlers( rec, context );
++    if (observer) aoe_notify( observer, 4, original_pc, rec, context, NULL, vectored_result, token );
++    if (vectored_result == EXCEPTION_CONTINUE_EXECUTION)
+         NtContinue( context, FALSE );
+ 
+     if ((status = call_seh_handlers( rec, context )) == STATUS_SUCCESS)
+--- a/dlls/ntdll/ntdll.spec
++++ b/dlls/ntdll/ntdll.spec
+@@ -1775,3 +1775,4 @@
+ # AoE laboratory software exception entries
+ @ cdecl -norelay -arch=x86_64 __wine_aoe_softfault1()
+ @ cdecl -norelay -arch=x86_64 __wine_aoe_softfault2()
++@ stdcall -norelay -private -arch=x86_64 __wine_aoe_set_exception_observer(ptr)

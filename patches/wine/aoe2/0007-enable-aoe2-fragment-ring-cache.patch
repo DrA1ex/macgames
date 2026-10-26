@@ -1,0 +1,35 @@
+--- a/dlls/ntdll/unix/aoe_code_cache.h
++++ b/dlls/ntdll/unix/aoe_code_cache.h
+@@ -11,7 +11,7 @@
+ static struct aoe_cache_entry *aoe_cache_entries;
+ static BYTE *aoe_cache_code;
+ static unsigned aoe_cache_used;
+-static int aoe_cache_enabled,aoe_cache_attempted;
++static int aoe_cache_enabled,aoe_cache_attempted,aoe_cache_aoe2;
+ static pthread_once_t aoe_cache_enable_once=PTHREAD_ONCE_INIT;
+ static void aoe_cache_check_enabled(void)
+ {
+@@ -21,7 +21,12 @@
+  name=main_argv[0];
+  if((slash=strrchr(name,'/')))name=slash+1;
+  if((slash=strrchr(name,'\\')))name=slash+1;
+- aoe_cache_enabled=!strcasecmp(name,"RelicCardinal.exe") ||
++ /* AoE II uses the same 32-byte/16-MiB ring layout at a different global.
++  * The launcher separately pins the executable hash before setting both
++  * switches. Preserve AoE IV's existing gate and pointer unchanged. */
++ aoe_cache_aoe2=!strcasecmp(name,"AoE2DE_s.exe") &&
++   getenv("AOELAB_CODE_CACHE_AOE2") && !strcmp(getenv("AOELAB_CODE_CACHE_AOE2"),"1");
++ aoe_cache_enabled=aoe_cache_aoe2 || !strcasecmp(name,"RelicCardinal.exe") ||
+    (getenv("AOELAB_CODE_CACHE_TEST_RING")&&!strcasecmp(name,"test_runtime_cache.exe"));
+ }
+ static uint64_t aoe_cache_local_stats[16],*aoe_cache_stats=aoe_cache_local_stats;
+@@ -52,7 +57,8 @@
+  if(!aoe_cache_enabled || pc<0x140000000ULL || pc>=0x180000000ULL)return pc;
+  test=getenv("AOELAB_CODE_CACHE_TEST_RING");
+  if(test)ring=strtoull(test,NULL,0);
+- else if(virtual_uninterrupted_read_memory((void*)0x147af7ad0ULL,&ring,sizeof(ring))!=sizeof(ring))return pc;
++ else if(virtual_uninterrupted_read_memory((void*)(aoe_cache_aoe2?0x144c943f0ULL:0x147af7ad0ULL),&ring,sizeof(ring))!=sizeof(ring))return pc;
++ if(aoe_cache_aoe2 && (ring&31))return pc;
+  if(!ring||pc<ring||pc>=ring+0x1000000)return pc;
+  available=32-(pc-ring)%32;
+  if(virtual_uninterrupted_read_memory((void*)pc,original,available)!=available)return pc;

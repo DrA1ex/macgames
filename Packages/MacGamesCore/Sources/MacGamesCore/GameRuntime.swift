@@ -74,10 +74,30 @@ public final class GameRuntime: @unchecked Sendable {
             }
         }
         var env = environment(optimized: optimized, hud: s.hud)
-        if optimized, profile.id == "aoe4",
-           (try? String(contentsOf: runtime.resources.appendingPathComponent("aoe-performance-v2"), encoding: .utf8)
-               .trimmingCharacters(in: .whitespacesAndNewlines)) == "2" {
+        let composed = (try? String(contentsOf: runtime.resources.appendingPathComponent("aoe-performance-v2"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)) == "2"
+        if optimized, profile.id == "aoe4", composed {
             env["MACGAMES_AOE_COMBINED"] = "1"
+        }
+        if profile.id == "aoe2" {
+            // The stock ring pointer is AoE IV-specific. Only the verified AoE II
+            // engine may enable its own software-fault and function-cache path.
+            env["AOELAB_CODE_CACHE_GAME"] = nil
+            if AoE2FunctionCache.verified(in: paths) != nil {
+                env["MallocProbGuard"] = "1"
+                if optimized, composed {
+                    env["MACGAMES_AOE_COMBINED"] = "1"
+                    env["AOELAB_CODE_CACHE_GAME"] = "1"
+                    env["AOELAB_CODE_CACHE_AOE2"] = "1"
+                    env["AOELAB_AOE2_FUNCTION_CACHE_PERSIST"] = "1"
+                    // Stable across calls: Steam's fingerprint must not contain a nonce.
+                    env["AOELAB_AOE2_FUNCTION_CACHE_STATUS"] = paths.windowsPath(
+                        driveC.appendingPathComponent("macgames/aoe2-cache.bin"))
+                    if AoE2FunctionCache.selectionJumpAvailable(in: runtime) {
+                        env["AOELAB_AOE2_SELECTION_JUMP"] = "1"
+                    }
+                }
+            }
         }
         // Included in Steam's managed fingerprint so a changed display mode
         // restarts the session before the registry recipe is applied.
@@ -145,7 +165,7 @@ public final class GameRuntime: @unchecked Sendable {
         progress("Configuring Windows 10, graphics and controllers…")
         try runWine(["winecfg", "-v", "win10"], environment: plain, timeout: 120)
         try PrefixSetup.replaceUserLinks(prefix: paths.prefix)
-        try PrefixSetup.apply(PrefixSetup.graphicsCopies(for: paths))
+        try PrefixSetup.apply(PrefixSetup.coreCopies(for: paths) + PrefixSetup.graphicsCopies(for: paths))
         try PrefixSetup.mapRootDrives(paths: paths)
         if paths.environment.sdlControllers {
             for command in PrefixSetup.wineBusCommands {
@@ -225,9 +245,12 @@ public final class GameRuntime: @unchecked Sendable {
         for pack in paths.environment.packs {
             try Packs.install(pack, paths: paths, downloader: downloader, runner: runner)
         }
-        guard try EngineInstaller(runtime: runtime).install(for: paths) else { return }
+        let installer = EngineInstaller(runtime: runtime)
+        if installer.isCurrent(for: paths) { return }
+        guard !isSessionRunning() else { throw SetupError("Close the current Windows session before changing the game runtime.") }
+        guard try installer.install(for: paths) else { return }
         if fm.fileExists(atPath: paths.prefix.appendingPathComponent("drive_c/windows").path) {
-            try PrefixSetup.apply(PrefixSetup.graphicsCopies(for: paths))
+            try PrefixSetup.apply(PrefixSetup.coreCopies(for: paths) + PrefixSetup.graphicsCopies(for: paths))
         }
     }
 
@@ -313,13 +336,25 @@ public final class GameRuntime: @unchecked Sendable {
         guard fm.fileExists(atPath: paths.runtimeReady.path), fm.fileExists(atPath: paths.steamExe.path) else {
             throw SetupError("Set up Steam first.")
         }
-        let wasRunning = isSessionRunning()
-        if !wasRunning { try ensureEngine() }
+        var running = isSessionRunning()
+        let needsProfileEngine: Bool
+        switch mode {
+        case .play, .background: needsProfileEngine = true
+        case .open, .install: needsProfileEngine = false
+        }
+        if running, needsProfileEngine, !EngineInstaller(runtime: runtime).isCurrent(for: paths) {
+            if let playing = runningGameTitle() {
+                throw SetupError("Close \(playing) first. Steam must restart with \(profile.title)'s runtime.")
+            }
+            progress("Restarting Steam with the game's runtime…")
+            try stop()
+            running = false
+        }
+        if !running { try ensureEngine() }
         // HOME/TMPDIR can be per-game even when joining an existing Steam.
         ensureSandbox()
         let env = try launchEnvironment()
         let fingerprint = SteamLaunch.fingerprint(env)
-        var running = wasRunning
         let matches = SteamSession.load(paths)?.fingerprint == fingerprint
         if SteamLaunch.needsRestart(mode, sessionRunning: running, fingerprintMatches: matches) {
             // Every game shares this Steam; restarting it ends whichever one plays.
@@ -384,6 +419,7 @@ public final class GameRuntime: @unchecked Sendable {
             if !(try applyCS2Display(width: w, height: h)) { extra = SteamLaunch.cs2DisplayArguments(width: w, height: h) }
         }
         try startSteam(.play(extra))
+        if profile.id == "aoe2" { startAoE2FunctionCache(environment: try launchEnvironment()) }
         if fixDisplay { try? fm.removeItem(at: cs2DisplayPending) }
     }
 

@@ -6,7 +6,7 @@
 
 <p align="center">
   Play your Windows games from Steam and Battle.net on an Apple Silicon Mac.<br>
-  Twenty-one games, each with graphics and performance settings tuned for it.
+  Twenty-two games, each with graphics and performance settings tuned for it.
 </p>
 
 <p align="center">
@@ -46,6 +46,7 @@
 | Game | Environment | Renderer |
 |---|---|---|
 | [Age of Empires IV](https://macgames.app/games/age-of-empires-iv/) | Steam library | D3DMetal, x87sidecar optimization |
+| Age of Empires II: Definitive Edition | Steam library | D3DMetal, pinned-build x87 and selection-cache optimization |
 | [Counter-Strike 2](https://macgames.app/games/counter-strike-2/) | Steam library | DXMT with early shader compile |
 | [Age of Empires III: Definitive Edition](https://macgames.app/games/age-of-empires-iii-definitive-edition/) | Steam library | D3DMetal |
 | [Age of Mythology: Retold](https://macgames.app/games/age-of-mythology-retold/) | Steam library | D3DMetal, notch-safe fullscreen |
@@ -100,6 +101,9 @@ To build MacGames yourself, use Xcode.
    ```sh
    scripts/fetch-runtime.sh
    ```
+
+   AoE II also uses a source-built Wine overlay and cache helper. Its additional runtime
+   build toolchain and validation limits are described in [AoE II runtime](docs/aoe2-runtime.md).
 
    This downloads the runtime archive (about 125 MB) from this repository's
    [releases](../../releases), checks its SHA-256 and signatures, and unpacks it into `Vendor/`.

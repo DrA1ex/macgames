@@ -1,0 +1,90 @@
+--- /dev/null
++++ b/dlls/ntdll/aoe_context.h
+@@ -0,0 +1,10 @@
++/* Private Wine amd64 thread-cache offsets shared by PE and Unix code.
++ * The Unix assertions validate these against the actual private structure.
++ */
++#define AOE_TEB_DR0 0x2f0
++#define AOE_TEB_DR1 0x2f8
++#define AOE_TEB_DR2 0x300
++#define AOE_TEB_DR3 0x308
++#define AOE_TEB_DR6 0x310
++#define AOE_TEB_DR7 0x318
++#define AOE_TEB_FS  0x338
+--- a/dlls/ntdll/signal_x86_64.c
++++ b/dlls/ntdll/signal_x86_64.c
+@@ -38,6 +38,7 @@
+ #include "ntdll_misc.h"
+ #include "wine/debug.h"
+ #include "ntsyscalls.h"
++#include "aoe_context.h"
+ 
+ 
+ /*******************************************************************
+@@ -130,6 +131,39 @@
+ }
+ 
+ 
++/* CS/DS are process-wide constants in the Unix signal implementation. The
++ * debug-register and FS caches are thread-local and must always be read live.
++ * Keep the first Unix call to obtain selectors rather than assuming their
++ * platform-specific values. Later faults avoid a full Unix-call transition.
++ */
++static NTSTATUS aoe_fill_exception_context( CONTEXT *context )
++{
++    static LONG cached_selectors;
++    ULONG selectors = __atomic_load_n( &cached_selectors, __ATOMIC_ACQUIRE );
++    const volatile BYTE *teb;
++    NTSTATUS status;
++
++    C_ASSERT( offsetof( TEB, GdiTebBatch ) == AOE_TEB_DR0 );
++    if (!selectors)
++    {
++        if ((status = WINE_UNIX_CALL( unix_aoe_exception_context, context ))) return status;
++        selectors = context->SegCs | ((ULONG)context->SegSs << 16);
++        __atomic_store_n( &cached_selectors, selectors, __ATOMIC_RELEASE );
++        return STATUS_SUCCESS;
++    }
++    teb = (const volatile BYTE *)NtCurrentTeb();
++    context->SegCs = selectors;
++    context->SegSs = context->SegDs = context->SegEs = context->SegGs = selectors >> 16;
++    context->SegFs = *(const volatile DWORD *)(teb + AOE_TEB_FS);
++    context->Dr0 = *(const volatile ULONG64 *)(teb + AOE_TEB_DR0);
++    context->Dr1 = *(const volatile ULONG64 *)(teb + AOE_TEB_DR1);
++    context->Dr2 = *(const volatile ULONG64 *)(teb + AOE_TEB_DR2);
++    context->Dr3 = *(const volatile ULONG64 *)(teb + AOE_TEB_DR3);
++    context->Dr6 = *(const volatile ULONG64 *)(teb + AOE_TEB_DR6);
++    context->Dr7 = *(const volatile ULONG64 *)(teb + AOE_TEB_DR7);
++    return STATUS_SUCCESS;
++}
++
+ /* Opt-in software delivery thunk; installed only in the isolated soft engine. */
+ void DECLSPEC_NORETURN aoe_soft_dispatch(ULONG64 *r, BYTE *xs, ULONG fault_length) {
+  BYTE storage[4096];ULONG avx_len=0;CONTEXT *c;CONTEXT_EX *ex;EXCEPTION_RECORD rec={0};ULONG64 mask;void *avx;NTSTATUS status;
+@@ -137,7 +171,7 @@
+  status=RtlInitializeExtendedContext2(storage,CONTEXT_ALL|CONTEXT_XSTATE,&ex,7);
+  if(status)RtlRaiseStatus(status);
+  c=RtlLocateLegacyContext(ex,NULL);
+- status=WINE_UNIX_CALL(unix_aoe_exception_context,c);
++ status=aoe_fill_exception_context(c);
+  if(status)RtlRaiseStatus(status);
+  c->ContextFlags=CONTEXT_ALL|CONTEXT_XSTATE;
+  c->R15=r[0];c->R14=r[1];c->R13=r[2];c->R12=r[3];c->R11=r[4];c->R10=r[5];c->R9=r[6];c->R8=r[7];c->Rdi=r[8];c->Rsi=r[9];c->Rbp=r[10];c->Rbx=r[11];c->Rdx=r[12];c->Rcx=r[13];c->Rax=r[14];c->EFlags=(DWORD)r[15];c->Rip=r[16]-fault_length;c->Rsp=(ULONG64)(r+17);
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -517,6 +517,15 @@
+ C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, instrumentation_callback ) == 0x330 );
+ C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, fs ) == 0x338 );
+ C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, mxcsr ) == 0x33c );
++
++#include "../aoe_context.h"
++C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, dr0 ) == AOE_TEB_DR0 );
++C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, dr1 ) == AOE_TEB_DR1 );
++C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, dr2 ) == AOE_TEB_DR2 );
++C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, dr3 ) == AOE_TEB_DR3 );
++C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, dr6 ) == AOE_TEB_DR6 );
++C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, dr7 ) == AOE_TEB_DR7 );
++C_ASSERT( offsetof( TEB, GdiTebBatch ) + offsetof( struct amd64_thread_data, fs ) == AOE_TEB_FS );
+ 
+ static inline struct amd64_thread_data *amd64_thread_data(void)
+ {

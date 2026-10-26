@@ -1,0 +1,164 @@
+# Original changes to x87sidecar; provided under its MIT license.
+# Baseline: https://github.com/tarikbc/macgames/releases/tag/runtime-4
+# Translator origin: https://github.com/athei/x87sidecar
+# sidecar-source.tar.gz SHA-256: 50ad26b802a590b7c49a121da35ca632bc2676b2fcde40b663805e612d547ff0
+
+--- a/rosetta_core/src/Translator.cpp
++++ b/rosetta_core/src/Translator.cpp
+@@ -104,6 +104,13 @@
+     -> std::optional<int64_t> {
+     auto* const cur_instr = &instr_array[insn_idx];
+     const auto opcode = cur_instr->opcode();
++    // These logarithm emitters need seven FPRs, including their inputs.
++    // Decline before changing translation state if stock holds more registers.
++    // The outer run wrapper flushes deferred state on a mid-run decline.
++    if ((opcode == Opcode::kOpcodeName_fyl2x || opcode == Opcode::kOpcodeName_fyl2xp1) &&
++        __builtin_popcount(translation_result->free_fpr_mask) < 7) {
++        return std::nullopt;
++    }
+     auto& cache = translation_result->x87_cache;
+ 
+     // ── OPT-1: x87 cross-instruction cache management ───────────────────────
+--- a/rosetta_core/src/TranslatorX87Transcendental.cpp
++++ b/rosetta_core/src/TranslatorX87Transcendental.cpp
+@@ -612,7 +612,8 @@
+ // function neither frees nor modifies them.
+ //
+ // GPR pressure: peaks at 4 scratch (Xu, Xu_off, Xtmp, plus Xconst).
+-// FPR pressure: peaks at ~6 (Dz, Dr, Dr2, Dinvc, Dlog2c, Dkd, Dhi, Dy_poly).
++// FPR pressure: five internal scratch registers. Reuse z for r and the
++// caller-owned output for p; Din is dead after the first FMOV below.
+ void emit_inline_log2(TranslationResult& a1, AssemblerBuffer& buf, int Din, int Xconst,
+                       int Dd_out) {
+     // 1. u = bits(Din);  u_off = u - off
+@@ -692,7 +693,7 @@
+     free_gpr(a1, Xidx);
+ 
+     // 6. r = -1 + z * invc   (FMADD with Da = -1.0)
+-    const int Dr = alloc_free_fpr(a1);
++    const int Dr = Dz;
+     {
+         const int Dneg_one = alloc_free_fpr(a1);
+         const int Xk = alloc_free_gpr(a1);
+@@ -701,7 +702,6 @@
+         emit_fmadd_f64(buf, Dr, Dz, Dinvc, Dneg_one);
+         free_fpr(a1, Dneg_one);
+     }
+-    free_fpr(a1, Dz);
+     free_fpr(a1, Dinvc);
+ 
+     // 7. r2 = r * r
+@@ -732,7 +732,7 @@
+         emit_fldr_imm(buf, 3, Dtmp, Xconst, ConstOff::Log2C3);
+         emit_fmadd_f64(buf, Dy, Dr, Dtmp, Dy);  // y = c2 + r*c3
+ 
+-        const int Dp = alloc_free_fpr(a1);
++        const int Dp = Dd_out;
+         emit_fldr_imm(buf, 3, Dp, Xconst, ConstOff::Log2C0);
+         emit_fldr_imm(buf, 3, Dtmp, Xconst, ConstOff::Log2C1);
+         emit_fmadd_f64(buf, Dp, Dr, Dtmp, Dp);  // p = c0 + r*c1
+@@ -740,7 +740,6 @@
+         emit_fldr_imm(buf, 3, Dtmp, Xconst, ConstOff::Log2C4);
+         emit_fmadd_f64(buf, Dy, Dr2, Dtmp, Dy);  // y += r²*c4
+         emit_fmadd_f64(buf, Dy, Dr2, Dy, Dp);    // y = p + r²*y_prev
+-        free_fpr(a1, Dp);
+         free_fpr(a1, Dtmp);
+     }
+     free_fpr(a1, Dr);
+@@ -759,8 +758,8 @@
+ // instruction (FMOV Xu, Din), so Dx_in doubles as log2's output slot —
+ // no extra register, and Dx_in becomes the returned result reg.  Dy_in
+ // is live across the whole log2 body (its only read is the final fmul),
+-// so the peak here is log2's 6 internal scratch + Dx_in + Dy_in = 8 —
+-// exactly the pool.  Caller keeps ownership of Xconst.
++// so the peak here is log2's five internal scratch + Dx_in + Dy_in = seven.
++// Caller keeps ownership of Xconst.
+ int emit_inline_fyl2x_core(TranslationResult& a1, AssemblerBuffer& buf, int Dy_in, int Dx_in,
+                            int Xconst) {
+     emit_inline_log2(a1, buf, Dx_in, Xconst, /*Dd_out=*/Dx_in);  // Dx_in := log2(Dx_in)
+@@ -1272,8 +1271,8 @@
+     // O(2^-53) relative in mid-range, and for tiny x it IS the result
+     // (u == 1, log2(1) == 0 — the table forces that exactly).
+     //
+-    // Register pressure: log2's body already peaks at the full FPR pool
+-    // (6 internal + Dx-as-in/out + Dy), so u/c cannot be held across it.
++    // Register pressure: log2's body peaks at seven FPRs
++    // (five internal + Dx-as-in/out + Dy), so u/c are not held across it.
+     // Instead x is reloaded afterwards from the ST(0) stack slot — still
+     // intact, the caller only stores to ST(1) and pops — and u is
+     // recomputed (deterministic FADD, bit-identical), keeping the peak
+--- a/tests/CMakeLists.txt
++++ b/tests/CMakeLists.txt
+@@ -96,3 +96,6 @@
+ # Native emitter regression: seven available FPRs must not abort.
+ add_executable(test_fsincos_pressure test_fsincos_pressure.cpp)
+ target_link_libraries(test_fsincos_pressure PRIVATE rosetta_core)
++
++add_executable(test_log_pressure test_log_pressure.cpp)
++target_link_libraries(test_log_pressure PRIVATE rosetta_core)
+--- /dev/null
++++ b/tests/test_log_pressure.cpp
+@@ -0,0 +1,63 @@
++#include <cassert>
++#include <cstdio>
++#include <cstdlib>
++#include "rosetta_core/IRBlock.h"
++#include "rosetta_core/Config.h"
++#include "rosetta_core/CoreConfig.h"
++#include "rosetta_core/Opcode.h"
++#include "rosetta_core/Register.h"
++#include "rosetta_core/TranslationResult.h"
++#include "rosetta_core/TranscendentalHelper.h"
++#include "rosetta_core/Translator.h"
++#include "rosetta_core/TranslatorX87.h"
++
++static void check(uint32_t mask, bool plus_one, bool mid_run=false) {
++    ThreadContextOffsets offsets{};
++    TranslationResult tr{};
++    tr.insn_buf.data = static_cast<uint32_t*>(std::calloc(1, 65536));
++    tr.insn_buf.end_cap = 65536;
++    tr.insn_buf.use_heap = 1;
++    tr.thread_context_offsets = &offsets;
++    tr.free_gpr_mask = kGprScratchMask;
++    tr.free_fpr_mask = mask;
++    tr._unoccupied_temporary_fprs_for_xmm_scalars = mask;
++    if (__builtin_popcount(mask) >= 7) {
++        if (plus_one) TranslatorX87::translate_fyl2xp1(&tr, nullptr);
++        else TranslatorX87::translate_fyl2x(&tr, nullptr);
++        assert(tr.insn_buf.end > 0);
++    } else {
++        IRInstr instrs[2]{};
++        instrs[0].set_opcode(mid_run ? kOpcodeName_fld1 : (plus_one ? kOpcodeName_fyl2xp1 : kOpcodeName_fyl2x));
++        instrs[1].set_opcode(plus_one ? kOpcodeName_fyl2xp1 : kOpcodeName_fyl2x);
++        IRBlock block{};
++        block.instrs = instrs;
++        block.num_instrs = mid_run ? 2 : 1;
++        auto next=Translator::translate_instruction(&tr, &block, instrs, block.num_instrs, 0);
++        if (mid_run) {
++            assert(next && *next==1);
++            assert(tr.insn_buf.end>0);
++        } else {
++            assert(!next);
++            assert(tr.insn_buf.end==0);
++        }
++        assert(!tr.x87_cache.active());
++    }
++    assert(tr.free_fpr_mask == mask);
++    assert(tr.free_gpr_mask == kGprScratchMask);
++    std::printf("PASS %s mask=%08x free=%d emitted=%llu\n", plus_one ? "FYL2XP1" : "FYL2X",
++                mask, __builtin_popcount(mask), static_cast<unsigned long long>(tr.insn_buf.end));
++    std::free(tr.insn_buf.data);
++}
++int main() {
++    RosettaConfig config{};
++    config.disable_x87_ir=1;
++    config.disabled_fusions_mask=~uint64_t{0};
++    rosetta_set_config(&config);
++    rosetta_core::set_transcendental_constants_addr(0x123456780);
++    for (bool plus_one : {false, true}) {
++        check(kFprScratchMask, plus_one);
++        for (int r=24; r<32; ++r) check(kFprScratchMask & ~(1U<<r), plus_one);
++        for (int n=0; n<7; ++n) check(((1U<<n)-1U)<<24, plus_one);
++        check(0x3f000000, plus_one, true);
++    }
++}

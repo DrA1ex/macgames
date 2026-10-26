@@ -42,7 +42,7 @@ public enum SteamLaunch {
     /// Keys a game recipe can change besides the stripped prefixes; they decide where the game
     /// keeps its files and which app it thinks it is.
     static let recipeKeys = ["HOME", "XDG_", "TMPDIR", "SteamAppId", "SteamGameId", "SteamOverlayGameId",
-                             "CFFIXED_USER_HOME", "GTM_", "USER", "LOGNAME", "FFXPROXY_", "QT_", "DOTNET_"]
+                             "CFFIXED_USER_HOME", "GTM_", "USER", "LOGNAME", "FFXPROXY_", "QT_", "DOTNET_", "MallocProbGuard"]
 
     public static func fingerprint(_ environment: [String: String]) -> String {
         let managed = environment.filter { key, _ in

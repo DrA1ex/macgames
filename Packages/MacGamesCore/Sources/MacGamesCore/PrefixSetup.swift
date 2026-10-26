@@ -21,6 +21,14 @@ public enum PrefixSetup {
         }
     }
 
+    /// Keep the prefix's ntdll consistent when switching a prepared AoE II
+    /// engine back to the regular engine used by the other shared games.
+    public static func coreCopies(for paths: GamePaths) -> [Copy] {
+        let source = paths.engine.appendingPathComponent("lib/wine/x86_64-windows/ntdll.dll")
+        guard FileManager.default.fileExists(atPath: source.path) else { return [] }
+        return [Copy(from: source, to: paths.prefix.appendingPathComponent("drive_c/windows/system32/ntdll.dll"))]
+    }
+
     /// The graphics libraries an environment's prefix needs, in the order they are copied.
     public static func graphicsCopies(for paths: GamePaths) -> [Copy] {
         let windows = paths.prefix.appendingPathComponent("drive_c/windows")

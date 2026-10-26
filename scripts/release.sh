@@ -74,6 +74,11 @@ sign "$APP/Contents/Frameworks/Sparkle.framework"
 sign --entitlements App/x87sidecar.entitlements "$APP/Contents/Helpers/x87sidecar"
 sign --entitlements App/MacGamesBridge.entitlements "$APP/Contents/Helpers/MacGamesBridge"
 sign "$APP/Contents/Helpers/RosettaProbe"
+# This profile ships a new source-built Mach-O; sign it and update capability
+# hashes after both this signature and the sidecar's release signature change.
+AOE2_NATIVE="$APP/Contents/Resources/Runtime/Overlays/aoe2-selection/lib/wine/x86_64-unix/ntdll.so"
+[ ! -f "$AOE2_NATIVE" ] || sign "$AOE2_NATIVE"
+python3 scripts/refresh-aoe2-capabilities.py "$APP"
 sign --entitlements App/MacGames.entitlements "$APP"
 codesign --verify --deep --strict "$APP"
 codesign --verify --strict "$APP/Contents/Resources/Runtime/Engine/bin/wine" "$APP/Contents/Helpers/x87sidecar"
