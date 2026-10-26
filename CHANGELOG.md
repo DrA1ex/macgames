@@ -2,6 +2,19 @@
 
 All notable changes to MacGames are listed here.
 
+## 0.1.3 - 2026-10-25
+
+- Age of Empires IV stutters much less. Its x87 math and its software exception handling now run
+  together in the Rosetta optimization, where before the exception handling switched the x87 part off.
+  Loading a save no longer crashes. Thanks to @DrA1ex
+- A HiDPI (Retina) setting on each game's page. It applies to every game in the same Windows
+  environment, and Steam or Battle.net restarts to apply it at the next launch. Overwatch keeps it on,
+  because its fullscreen canvas needs it
+- Age of Wonders 4 is supported, on D3DMetal. MacGames starts the game itself and skips the Paradox
+  Launcher, whose window never opens under Wine. The first play installs the game's Windows runtimes,
+  and Wine's Retina mode is on for the game alone, so it draws at the display's full size. Thanks to
+  @jppittman
+
 ## 0.1.2 - 2026-10-22
 
 - Age of Empires IV starts again. The Steam library's engine carried DXMT's `dxgi` and `d3d11` in place

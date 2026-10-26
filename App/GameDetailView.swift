@@ -262,9 +262,11 @@ private struct SettingsSection: View {
                     Toggle("", isOn: $game.settings.hud).labelsHidden().toggleStyle(.switch)
                 }
                 Divider().opacity(0.3)
-                row("HiDPI (Retina)", detail: "Applies to all games in \(game.runtime.paths.environment.title). Restart the game to apply.") {
+                row("HiDPI (Retina)", detail: game.hiDPIRequired
+                        ? "\(game.runtime.paths.environment.title) needs HiDPI."
+                        : "Applies to all games in \(game.runtime.paths.environment.title). Restart the game to apply.") {
                     Toggle("HiDPI (Retina)", isOn: $game.hiDPI)
-                        .labelsHidden().toggleStyle(.switch)
+                        .labelsHidden().toggleStyle(.switch).disabled(game.hiDPIRequired)
                 }
                 if game.profile.optimizedExecutableSHA256 != nil {
                     Divider().opacity(0.3)

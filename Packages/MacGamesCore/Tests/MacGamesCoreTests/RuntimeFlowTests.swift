@@ -21,7 +21,6 @@ struct FakeEnvironment {
     }
 
 
-
     final class EventLog: @unchecked Sendable {
         private let lock = NSLock()
         private var lines: [String] = []

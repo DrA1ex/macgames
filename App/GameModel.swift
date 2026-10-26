@@ -90,9 +90,13 @@ final class GameModel: Identifiable {
     /// What the next launch does with the x87 optimization.
     private(set) var optimization: OptimizationStatus = .notApplicable
 
+    /// The environment fixes HiDPI on (Overwatch), so the toggle only shows it.
+    var hiDPIRequired: Bool { profile.gameEnvironment.requiresHiDPI }
+
     var hiDPI: Bool {
         get { environmentSettings.value.hiDPI }
         set {
+            guard !hiDPIRequired else { return }
             do { try environmentSettings.setHiDPI(newValue) }
             catch { self.error = String(describing: error) }
         }

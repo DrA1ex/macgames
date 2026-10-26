@@ -15,9 +15,9 @@ The inherited catalog contains more game profiles, but the modified local-launch
 
 ## Focused upstream contribution
 
-The [`feat/rosetta-hidpi`](https://github.com/DrA1ex/macgames/tree/feat/rosetta-hidpi) branch is a separate, Steam/Battle.net-compatible proposal for the original project. It includes the working sidecar fixes, the **Rosetta optimization** label/integration and **HiDPI (Retina)**. It keeps upstream's launcher and shared-prefix architecture; local-EXE UI and research-only Wine patches stay on this fork's main branch.
+The earlier Steam/Battle.net-compatible proposal was merged as [upstream PR #5](https://github.com/tarikbc/macgames/pull/5) and shipped in [0.1.3](https://github.com/tarikbc/macgames/releases/tag/v0.1.3). Upstream tested the final head through Steam and notarized the rebuilt sidecar. Its shared environment HiDPI setting, fixed-on Overwatch mode and ordinary registry recipe updates are retained here.
 
-In that branch a changed HiDPI preference restarts an idle Steam/Battle.net session before registry updates. An active game blocks that restart. Merely opening an existing Steam defers the change and preserves downloads. Modified Steam gameplay still needs a manual end-to-end test; source builds and launcher/process tests do not substitute for it.
+This fork keeps its local-EXE interface. A separate AoE II Steam branch is prepared from current upstream, without the fork-specific UI and diagnostics.
 
 ## Build and use
 
@@ -56,7 +56,7 @@ Each working sidecar patch has its own commit. Integration, HiDPI, local-launch 
 ## Validation
 
 - Upstream-compatible branch: **285 tests / 73 suites**, plus full Xcode/Steam/Sparkle app build.
-- Fork main: **319 tests / 81 suites**, plus the complete local app and source-patched helper build.
+- Fork main: **323 tests / 81 suites**, plus the complete local app and source-patched helper build.
 - Game observations: an M5 Pro / macOS 26.5.2 local AoE IV save improved from an initial user-reported 20-25 FPS to 55-58 FPS after the working combination and crash fixes. These are single-machine observations, not a controlled cross-platform benchmark or a promise.
 - AoE II: the user reproduced selection stutter in «ПЕРФ», confirmed that the cache restored unselected-level smoothness, then repeated the test successfully through the ordinary runner with automatic installation/connection. Both functions passed without reported cache errors or body mismatches.
 - Matched 3840x2160 windowed comparison: installed app **24.91 ms GPU / 39.70 FPS**; control without extra diagnostics **24.88 ms / 39.34 FPS**. Extra instrumentation had confounded earlier comparisons. Actual render size and scene state must match.
