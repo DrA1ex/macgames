@@ -49,6 +49,7 @@ AOE2_OVERLAY="$(python3 "$ROOT/scripts/prepare-aoe2-runtime.py")"
 ditto "$AOE2_OVERLAY" "$BUNDLE/Contents/Resources/Runtime/Overlays/aoe2-selection"
 mkdir -p "$BUNDLE/Contents/Resources/Runtime/Sources"
 cp "$ROOT/build/aoe2-runtime/wine-aoe2-source-patched.tar.gz" "$BUNDLE/Contents/Resources/Runtime/Sources/"
+ditto "$ROOT/App/Artwork" "$BUNDLE/Contents/Resources/Artwork"
 for asset in AppIcon.icns Assets.car; do
   if [ -f "$SOURCE_APP/Contents/Resources/$asset" ]; then
     cp "$SOURCE_APP/Contents/Resources/$asset" "$BUNDLE/Contents/Resources/"

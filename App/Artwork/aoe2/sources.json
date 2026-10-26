@@ -1,0 +1,17 @@
+{
+  "hero.jpg": {
+    "source": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/813780/library_hero.jpg",
+    "sha256": "733103aeca66f558c3b942eb90463b64aad87cfa0746e30bc98af4926323b779",
+    "bytes": 527649
+  },
+  "portrait.jpg": {
+    "source": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/813780/library_600x900.jpg",
+    "sha256": "e897765ccc2669c563a1fe21b6b273fd0c4122e169f0b43b71b286ee28703093",
+    "bytes": 72521
+  },
+  "logo.png": {
+    "source": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/813780/logo.png",
+    "sha256": "0cc3a81e4d61492aced4449ba4d7a1cdf0bd57f0feadc337344e8e9714308e9b",
+    "bytes": 255782
+  }
+}

@@ -11,6 +11,7 @@ APP="$TARGET_BUILD_DIR/$WRAPPER_NAME"
 RT="$APP/Contents/Resources/Runtime"
 HELPERS="$APP/Contents/Helpers"
 mkdir -p "$RT" "$HELPERS"
+ditto "$SRCROOT/App/Artwork" "$APP/Contents/Resources/Artwork"
 
 # Byte-for-byte copies: the engine's signatures and entitlements must stay valid.
 rsync -a --delete "$VENDOR/Engine/" "$RT/Engine/"

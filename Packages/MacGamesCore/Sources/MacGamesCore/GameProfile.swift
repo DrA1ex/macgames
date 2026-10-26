@@ -87,6 +87,12 @@ public struct GameProfile: Sendable, Hashable, Identifiable {
         public let hero: URL
         public let logo: URL
         public let portrait: URL
+
+        public init(hero: URL, logo: URL, portrait: URL) {
+            self.hero = hero
+            self.logo = logo
+            self.portrait = portrait
+        }
     }
 
     public let presentation: Presentation

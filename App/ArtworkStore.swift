@@ -2,7 +2,7 @@ import AppKit
 import MacGamesCore
 import Observation
 
-/// Loads Steam artwork once and keeps it in memory and in a disk cache.
+/// Loads bundled artwork first, then Steam artwork with memory/disk caching.
 @MainActor @Observable
 final class ArtworkStore {
     static let shared = ArtworkStore()
@@ -15,6 +15,7 @@ final class ArtworkStore {
     @ObservationIgnored private var loading: Set<URL> = []
     @ObservationIgnored private var resolving = false
     @ObservationIgnored private let session: URLSession
+    @ObservationIgnored private let bundled: [String: GameProfile.Artwork]
 
     private init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -23,10 +24,24 @@ final class ArtworkStore {
                                    directory: caches.appendingPathComponent("com.tarikbc.macgames/artwork"))
         config.requestCachePolicy = .returnCacheDataElseLoad
         session = URLSession(configuration: config)
+        var local: [String: GameProfile.Artwork] = [:]
+        if let resources = Bundle.main.resourceURL {
+            for profile in GameProfile.all {
+                let folder = resources.appendingPathComponent("Artwork/\(profile.id)")
+                let hero = folder.appendingPathComponent("hero.jpg")
+                let logo = folder.appendingPathComponent("logo.png")
+                let portrait = folder.appendingPathComponent("portrait.jpg")
+                if [hero, logo, portrait].allSatisfy({ FileManager.default.isReadableFile(atPath: $0.path) }) {
+                    local[profile.id] = GameProfile.Artwork(hero: hero, logo: logo, portrait: portrait)
+                }
+            }
+        }
+        bundled = local
     }
 
-    /// The game's art; the first call asks the store for the art paths of every game.
+    /// Prefer bundled art; other games resolve their artwork through Steam.
     func artwork(for profile: GameProfile) -> GameProfile.Artwork? {
+        if let art = bundled[profile.id] { return art }
         resolveOnce()
         return profile.artwork(resolved: resolved)
     }
@@ -38,6 +53,11 @@ final class ArtworkStore {
         loading.insert(url)
         Task {
             defer { loading.remove(url) }
+            if url.isFileURL {
+                if let image = NSImage(contentsOf: url) { images[url] = image }
+                else { failed.insert(url) }
+                return
+            }
             guard let (data, response) = try? await session.data(from: url) else { return }
             if (response as? HTTPURLResponse)?.statusCode == 200, let image = NSImage(data: data) {
                 images[url] = image
