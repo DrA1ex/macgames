@@ -21,7 +21,10 @@ public struct EngineInstaller: Sendable {
         // An engine pack brings the whole engine, so the app's runtime version does not matter.
         let base = paths.environment.enginePack == nil ? try runtime.version() : "pack"
         let layout = paths.environment.mixesRenderers ? [Self.separateRenderersMarker] : []
-        return ([base] + paths.environment.engineOverlays + layout + packs).joined(separator: "+")
+        let aoe2 = try AoE2FunctionCache.bundledOverlay(for: paths, runtime: runtime).map {
+            "aoe2-selection:" + (try sha256Hex(ofFileAt: $0.appendingPathComponent("aoe2-function-cache/capability.json")))
+        }
+        return ([base] + paths.environment.engineOverlays + layout + packs + [aoe2].compactMap { $0 }).joined(separator: "+")
     }
 
     public func isCurrent(for paths: GamePaths) -> Bool {
@@ -52,6 +55,9 @@ public struct EngineInstaller: Sendable {
             guard let overlay = overlay(name, for: paths) else {
                 throw SetupError("The runtime is missing the \(name) overlay.")
             }
+            try ditto(overlay, stage)
+        }
+        if let overlay = try AoE2FunctionCache.bundledOverlay(for: paths, runtime: runtime) {
             try ditto(overlay, stage)
         }
         let links = paths.environment.enginePack == nil

@@ -15,19 +15,46 @@ enum AoE2FunctionCache {
         let loader: URL
         let capability: Capability
     }
-    static func verified(in paths: GamePaths) -> Artifacts? {
-        let folder = paths.engine.appendingPathComponent("aoe2-function-cache")
+    static func verifiedEngine(_ engine: URL) -> Artifacts? {
+        let folder = engine.appendingPathComponent("aoe2-function-cache")
         guard let data = try? Data(contentsOf: folder.appendingPathComponent("capability.json")),
               let pin = try? JSONDecoder().decode(Capability.self, from: data), pin.version == 1 else { return nil }
         let dll = folder.appendingPathComponent("cache.dll"), loader = folder.appendingPathComponent("loader.exe")
-        let files = [(paths.engine.appendingPathComponent("lib/wine/x86_64-unix/ntdll.so"), pin.nativeSHA256),
-                     (paths.engine.appendingPathComponent("lib/wine/x86_64-windows/ntdll.dll"), pin.peSHA256),
-                     (paths.prefix.appendingPathComponent("drive_c/windows/system32/ntdll.dll"), pin.peSHA256),
+        let files = [(engine.appendingPathComponent("lib/wine/x86_64-unix/ntdll.so"), pin.nativeSHA256),
+                     (engine.appendingPathComponent("lib/wine/x86_64-windows/ntdll.dll"), pin.peSHA256),
                      (dll, pin.dllSHA256), (loader, pin.loaderSHA256)]
         guard files.allSatisfy({ file, expected in
             expected.count == 64 && (try? sha256Hex(ofFileAt: file)) == expected
         }) else { return nil }
         return Artifacts(dll: dll, loader: loader, capability: pin)
+    }
+
+    static func verified(in paths: GamePaths) -> Artifacts? {
+        guard let files = verifiedEngine(paths.engine),
+              (try? sha256Hex(ofFileAt: paths.prefix.appendingPathComponent("drive_c/windows/system32/ntdll.dll")))
+                == files.capability.peSHA256 else { return nil }
+        return files
+    }
+
+    static func selectionJumpAvailable(in runtime: RuntimeLayout) -> Bool {
+        guard let text = try? String(contentsOf: runtime.resources.appendingPathComponent("aoe2-selection-jump"), encoding: .utf8) else { return false }
+        let fields = text.split(whereSeparator: \.isNewline)
+        return fields.count == 2 && fields[0] == "1" && fields[1].count == 64
+            && (try? sha256Hex(ofFileAt: runtime.sidecar)) == String(fields[1])
+    }
+
+    /// This overlay belongs to local AoE II. EngineInstaller switches the shared
+    /// environment only after the previous session has ended.
+    static func bundledOverlay(for paths: GamePaths, runtime: RuntimeLayout) throws -> URL? {
+        guard paths.localLaunch, paths.profile.id == "aoe2" else { return nil }
+        let overlay = runtime.overlay("aoe2-selection")
+        guard FileManager.default.fileExists(atPath: overlay.path) else { return nil }
+        guard let files = verifiedEngine(overlay),
+              let ring = try? String(contentsOf: overlay.appendingPathComponent(".macgames-aoe2-fragment-cache"), encoding: .utf8),
+              ring.split(whereSeparator: \.isNewline).map(String.init) == ["1", files.capability.nativeSHA256] else {
+            throw SetupError("The bundled AoE II runtime is incomplete or changed. Rebuild MacGames before launching it.")
+        }
+        return overlay
     }
 }
 

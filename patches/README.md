@@ -56,4 +56,14 @@ The Steam integration is covered by argument/environment/fallback and launcher-s
 
 The main branch additionally contains an original selected-EXE workflow, per-profile local prefixes, an optional working folder, generic cooperative x87 entry, and opt-in profiling/recording tools. These adapt existing MacGames/Wine/x87sidecar interfaces; they are not borrowed FEX patches and are excluded from the upstream proposal.
 
-The original Wine research patches live in `wine/experimental/`, along with test probes and their applicability/validation limits. They apply to the pinned runtime4 Wine source but are not part of default runtime embedding. Their base source archive SHA-256 is `7be5819017b34f09670293f2be7ed9f4476734b8f42dab121a8b74e6619c92a8`.
+The original Wine research patches live in `wine/experimental/`, along with test probes and their applicability/validation limits. They apply to the pinned runtime4 Wine source. The fork bundles their tested combination in an AoE II overlay selected only for that game. Their base source archive SHA-256 is `7be5819017b34f09670293f2be7ed9f4476734b8f42dab121a8b74e6619c92a8`.
+
+## Integrated AoE II runner profile
+
+`prepare-aoe2-runtime.py` builds native/PE ntdll from the pinned Wine archive plus experimental 0004–0009, builds the bounded EXE-specific cache DLL/loader, and records every binary hash. It preserves the matching modified Wine/cache sources. For local reuse, `--import-engine /path/to/the/validated/engine` accepts only the exact previously tested binary pair and patch hashes; other inputs require a source build.
+
+Both Xcode and `build-local.sh` embed this overlay and source archive. EngineInstaller selects it only for local AoE II, includes its capability hash in the installed-engine marker, and returns to the ordinary engine when another profile is launched. Prefix ntdll is recopied to match the selected engine. An active Wine session cannot be replaced. Settings, saves and external EXE paths stay in the existing shared environment.
+
+The single common sidecar now includes patch 0006. Its four AoE II JMP sites are gated by the game's exact hash, the native/PE capability and a sidecar SHA marker; generic x87 and AoE IV retain their own launch paths. The AoE II profile also sets the previously validated `MallocProbGuard=1` audio workaround only for its game launch. Existing Rosetta optimization and Exception handling controls remain available for comparisons.
+
+The validated local integration reused the exact previously tested native/PE binaries through the hash-checked import path. The clean Wine source-build fallback is provided but was not exercised in that integration run.

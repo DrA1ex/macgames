@@ -2,7 +2,7 @@
 
 The original handler repeatedly decodes and rewrites two functions when units are selected. Stable copies alone improved the user's HUD Frame Interval from 25–30 ms to an unstable 18–20 ms. This variant also avoids repeated handler decode/encode work on cache hits. The user then reported the same smoothness with and without selection in the reproduction save.
 
-This is specific to EXE SHA-256 `124744bf4ae0d3856238e00d61fe321d47fcd3c0d7dfcd175c6c76aa9fb458ff`. It remains an optional addition to the separately prepared experimental engine, not the default packaged Wine. Original game files are never changed.
+This is specific to EXE SHA-256 `124744bf4ae0d3856238e00d61fe321d47fcd3c0d7dfcd175c6c76aa9fb458ff`. It is now bundled with the runner as a game-specific overlay, selected by the local AoE II card. Other game profiles retain their ordinary engine. Original game files are never changed.
 
 ## Behavior
 
@@ -22,7 +22,7 @@ python3 patches/wine/experimental/aoe2-function-cache/install.py /path/to/separa
 
 The root must already contain `engine/` and `prefix/`. The installer builds only this optional DLL/loader and writes `engine/aoe2-function-cache/capability.json`. It does not rebuild or replace Wine. Rebuild MacGames from this branch and use that root with the existing local-EXE CLI. The prepared card uses its existing Exception handling switch; no extra UI switch is added.
 
-The separate audio workaround (`MallocProbGuard=1`) is still needed for the affected machine's intermittent caulk startup failure; it is independent of this cache and is not enabled by this installer.
+The regular runner profile also enables the separate audio workaround (`MallocProbGuard=1`) for AoE II. It is independent of this cache. The standalone research installer above does not set the launch environment.
 
 ## Checks and first live result
 
@@ -33,8 +33,12 @@ The separate audio workaround (`MallocProbGuard=1`) is still needed for the affe
 - 40000 real exception-chain calls: 39960 cache hits and 40 balanced original-handler validations.
 - Cache-hit CONTEXT changes only Rip; live disable and changed-body fallback retain balanced returns.
 - Exact-game hash accepted; a different EXE rejected by the loader.
-- MacGames capability tamper and changed-game fallback checks; full Swift suite: 316 tests in 81 suites.
+- MacGames capability tamper and changed-game fallback checks; full Swift suite: 319 tests in 81 suites.
 
 In one same-process 20-second selected-group comparison, raw HUD interval median/p95 changed from 24.69/50.00 to 16.67/18.93 ms, and main-thread CPU from 72.35% to 46.59% of one core. Both functions completed about 447000 cached calls each during the initial capture without mismatch or errors. The user independently reported that selected units now behave like the unselected baseline. Raw HUD histories contain duplicate points and cannot be treated as unique-frame FPS. Other applications caused memory compression/swap activity during both windows. This establishes a successful reproduction test, not long-term gameplay or every possible save.
 
 `selftest.c` and `pipeline.c` use locally obtained decoded body/unwind inputs, which are deliberately excluded from Git. Build the test executable with image base `0x150000000` to leave its synthetic game addresses free, and compile `catch.c` with clang's Windows SEH support. See the test source arguments. HDE64 files retain their BSD license in `HDE-LICENSE.txt`; the remaining research source follows the repository license.
+
+## Integrated build
+
+The ordinary app build now calls `scripts/prepare-aoe2-runtime.py` and bundles its overlay and matching source archive. It does not depend on local diagnostic folders. With the existing Rosetta optimization and Exception handling options enabled, the AoE II card chooses this engine, synchronizes prefix ntdll and connects the cache automatically. Switching to another card restores its ordinary engine before launch. The common sidecar retains independent per-game gates. Tests cover round-trip engine switching, an active-session replacement guard and stale sidecar/capability rejection.

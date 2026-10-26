@@ -103,4 +103,62 @@ import Testing
         #expect(!fixture.calls.contains { $0.contains("loader.exe") })
     }
 
+    @Test func bundledSelectionRuntimeSwitchesBackForAnotherGame() throws {
+        let dir = try makeTempDir(); defer { try? FileManager.default.removeItem(at: dir) }
+        let runtime = try EngineInstallerTests().fakeRuntime(in: dir)
+        let overlay = runtime.overlay("aoe2-selection")
+        let native = overlay.appendingPathComponent("lib/wine/x86_64-unix/ntdll.so")
+        let pe = overlay.appendingPathComponent("lib/wine/x86_64-windows/ntdll.dll")
+        let folder = overlay.appendingPathComponent("aoe2-function-cache")
+        let dll = folder.appendingPathComponent("cache.dll"), loader = folder.appendingPathComponent("loader.exe")
+        try write("aoe2-native", to: native); try write("aoe2-pe", to: pe)
+        try write("cache", to: dll); try write("loader", to: loader)
+        try write("stock-pe", to: runtime.engine.appendingPathComponent("lib/wine/x86_64-windows/ntdll.dll"))
+        let pin = AoE2FunctionCache.Capability(version: 1, nativeSHA256: try sha256Hex(ofFileAt: native),
+            peSHA256: try sha256Hex(ofFileAt: pe), dllSHA256: try sha256Hex(ofFileAt: dll),
+            loaderSHA256: try sha256Hex(ofFileAt: loader))
+        try JSONEncoder().encode(pin).write(to: folder.appendingPathComponent("capability.json"))
+        try write("1\n\(pin.nativeSHA256)\n", to: overlay.appendingPathComponent(".macgames-aoe2-fragment-cache"))
+        let aoe2 = GamePaths(profile: .aoe2, root: dir.appendingPathComponent("shared"), localLaunch: true)
+        let aoe4 = GamePaths(profile: .aoe4, root: aoe2.root, localLaunch: true)
+        let installer = EngineInstaller(runtime: runtime)
+        #expect(try installer.install(for: aoe2))
+        try PrefixSetup.apply(PrefixSetup.coreCopies(for: aoe2))
+        #expect(AoE2FunctionCache.verified(in: aoe2) != nil)
+        #expect(installer.isCurrent(for: aoe2))
+        #expect(!installer.isCurrent(for: aoe4))
+        #expect(try installer.install(for: aoe4))
+        try PrefixSetup.apply(PrefixSetup.coreCopies(for: aoe4))
+        #expect(read(aoe4.engine.appendingPathComponent("lib/wine/x86_64-unix/ntdll.so")) == "fixed ntdll")
+        #expect(read(aoe4.prefix.appendingPathComponent("drive_c/windows/system32/ntdll.dll")) == "stock-pe")
+        #expect(AoE2FunctionCache.verified(in: aoe4) == nil)
+        #expect(installer.isCurrent(for: aoe4))
+        #expect(try installer.install(for: aoe2))
+        try PrefixSetup.apply(PrefixSetup.coreCopies(for: aoe2))
+        #expect(AoE2FunctionCache.verified(in: aoe2) != nil)
+        try write("changed", to: dll)
+        #expect(throws: SetupError.self) { try installer.install(for: aoe2) }
+        #expect(read(aoe2.engine.appendingPathComponent("lib/wine/x86_64-unix/ntdll.so")) == "aoe2-native")
+    }
+
+    @Test func engineChangeCannotReplaceALiveSession() throws {
+        let fixture = try FakeEnvironment(.aoe2, localLaunch: true); defer { fixture.cleanUp() }
+        try write("new-version", to: fixture.runtime.runtime.resources.appendingPathComponent("VERSION"))
+        fixture.live(["AoE2DE_s.exe"])
+        #expect(throws: SetupError.self) { try fixture.runtime.ensureEngine() }
+        #expect(read(fixture.runtime.paths.wine) == FakeEnvironment.wine)
+    }
+
+    @Test func selectionJumpCannotUseAReplacedSidecar() throws {
+        let fixture = try FakeEnvironment(.aoe2, localLaunch: true); defer { fixture.cleanUp() }
+        let runtime = fixture.runtime.runtime
+        let marker = runtime.resources.appendingPathComponent("aoe2-selection-jump")
+        try write("common-sidecar", to: runtime.sidecar)
+        #expect(!AoE2FunctionCache.selectionJumpAvailable(in: runtime))
+        try write("1\n\(try sha256Hex(ofFileAt: runtime.sidecar))\n", to: marker)
+        #expect(AoE2FunctionCache.selectionJumpAvailable(in: runtime))
+        try write("different-sidecar", to: runtime.sidecar)
+        #expect(!AoE2FunctionCache.selectionJumpAvailable(in: runtime))
+    }
+
 }

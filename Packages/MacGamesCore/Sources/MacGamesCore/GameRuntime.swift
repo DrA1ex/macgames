@@ -120,10 +120,18 @@ public final class GameRuntime: @unchecked Sendable {
                 env["AOELAB_CODE_CACHE_AOE2"] = "1"
                 if AoE2FunctionCache.verified(in: paths) != nil {
                     env["AOELAB_AOE2_FUNCTION_CACHE_PERSIST"] = "1"
+                    if AoE2FunctionCache.selectionJumpAvailable(in: runtime) {
+                        env["AOELAB_AOE2_SELECTION_JUMP"] = "1"
+                    }
                     env["AOELAB_AOE2_FUNCTION_CACHE_STATUS"] = paths.windowsPath(
                         driveC.appendingPathComponent("macgames/aoe2-cache-\(UUID().uuidString).bin"))
                 }
             }
+        }
+        if paths.localLaunch, profile.id == "aoe2", AoE2FunctionCache.verified(in: paths) != nil {
+            // Caulk's alternative allocation path prevents the captured audio
+            // initialization assertion. Scope it to this game's launch.
+            env["MallocProbGuard"] = "1"
         }
         env["MACGAMES_HIDPI"] = environmentSettings.hiDPI ? "1" : "0"
         if let performanceDirectory {
@@ -212,7 +220,7 @@ public final class GameRuntime: @unchecked Sendable {
         progress("Configuring Windows 10, graphics and controllers…")
         try runWine(["winecfg", "-v", "win10"], environment: plain, timeout: 120)
         try PrefixSetup.replaceUserLinks(prefix: paths.prefix)
-        try PrefixSetup.apply(PrefixSetup.graphicsCopies(for: paths))
+        try PrefixSetup.apply(PrefixSetup.coreCopies(for: paths) + PrefixSetup.graphicsCopies(for: paths))
         try PrefixSetup.mapRootDrives(paths: paths)
         if paths.environment.sdlControllers {
             for command in PrefixSetup.wineBusCommands {
@@ -294,9 +302,12 @@ public final class GameRuntime: @unchecked Sendable {
         for pack in paths.environment.packs {
             try Packs.install(pack, paths: paths, downloader: downloader, runner: runner)
         }
-        guard try EngineInstaller(runtime: runtime).install(for: paths) else { return }
+        let installer = EngineInstaller(runtime: runtime)
+        if installer.isCurrent(for: paths) { return }
+        guard !isSessionRunning() else { throw SetupError("Close the current Windows session before changing the game runtime.") }
+        guard try installer.install(for: paths) else { return }
         if fm.fileExists(atPath: paths.prefix.appendingPathComponent("drive_c/windows").path) {
-            try PrefixSetup.apply(PrefixSetup.graphicsCopies(for: paths))
+            try PrefixSetup.apply(PrefixSetup.coreCopies(for: paths) + PrefixSetup.graphicsCopies(for: paths))
         }
     }
 

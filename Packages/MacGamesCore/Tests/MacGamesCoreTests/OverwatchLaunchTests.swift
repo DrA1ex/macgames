@@ -61,7 +61,7 @@ import Testing
         let env = try installed(); defer { env.cleanUp() }
         try write("", to: env.dir.appendingPathComponent("root/fail-ow2-pipeline"))
         try env.runtime.play(LaunchContext(width: 1512, height: 982))
-        #expect(env.calls.contains(battleNet + " --exec=launch Pro"))
+        #expect(env.waitForCall(containing: battleNet + " --exec=launch Pro"))
         #expect(env.events.all.contains { $0.contains("skipped") })
     }
 
@@ -90,7 +90,7 @@ import Testing
         try env.runtime.play(LaunchContext(width: 1512, height: 982))
         let conf = try #require(read(env.runtime.paths.gameData.appendingPathComponent("dxmt.conf")))
         #expect(conf.contains("dxgi.fullscreenCanvasWidth = 2560") && conf.contains("dxgi.fullscreenCanvasHeight = 1600"))
-        #expect(env.calls.contains(battleNet + " --exec=launch Pro"))
+        #expect(env.waitForCall(containing: battleNet + " --exec=launch Pro"))
     }
 
     @Test func aDisplayChangeEndsAnIdleSessionBeforeBattleNetStarts() throws {
@@ -121,7 +121,7 @@ import Testing
         try write("", to: env.dir.appendingPathComponent("root/handoff-exits-1"))
         env.live(["Battle.net.exe"])
         try env.runtime.play(LaunchContext(width: 1512, height: 982))
-        #expect(env.calls.contains(battleNet + " --exec=launch Pro"))
+        #expect(env.waitForCall(containing: battleNet + " --exec=launch Pro"))
     }
 
     @Test func openingBattleNetSetsTheDisplayButDoesNotStartTheGame() throws {

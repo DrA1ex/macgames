@@ -276,7 +276,7 @@ private struct SettingsSection: View {
                 }
                 if game.profile.id == "aoe2" {
                     Divider().opacity(0.3)
-                    row("Exception handling (experimental)", detail: "Tests faster exception delivery on the supported AoE II build. Requires Rosetta optimization; other builds use x87 only. Restart to apply.") {
+                    row("Exception handling (experimental)", detail: "Reduces stutter when selecting units on the supported AoE II build. Requires Rosetta optimization. Restart to apply.") {
                         Toggle("Exception handling", isOn: $game.settings.exceptionHandling)
                             .labelsHidden().toggleStyle(.switch).disabled(!game.settings.optimized)
                     }

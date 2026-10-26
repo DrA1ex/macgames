@@ -4,8 +4,8 @@
      if (displacement < INT32_MIN || displacement > INT32_MAX) return b;
      if(end && (end<=pc || !target1 || end-pc>0x6000000ULL))return b;
      if(end){for(uint64_t t:{target,target1})for(uint64_t a:{pc,end}){int64_t d=(int64_t)t-(int64_t)a-5;if(d<INT32_MIN||d>INT32_MAX)return b;}}
-+    const bool selection_jump = std::getenv("LOCAL_AOE_SELECTION_JUMP") &&
-+        !std::strcmp(std::getenv("LOCAL_AOE_SELECTION_JUMP"),"1") &&
++    const bool selection_jump = std::getenv("AOELAB_AOE2_SELECTION_JUMP") &&
++        !std::strcmp(std::getenv("AOELAB_AOE2_SELECTION_JUMP"),"1") &&
 +        pc == 0x140001000ULL && end == 0x143197790ULL &&
 +        target1 == 0x180000000ULL && target == 0x180000010ULL;
      auto& h=b.handler;

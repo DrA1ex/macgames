@@ -1,11 +1,10 @@
 # Non-returning selected softfault experiment
 
-This directory is excluded from the default patch glob in prepare-aoe-runtime.sh.
-Apply 0006 after the normal sidecar patches only with experimental Wine patch
-0009 and the already pinned AoE II executable. Enable LOCAL_AOE_SELECTION_JUMP=1
-only in the isolated matching runtime. A mismatched native Wine has no veneers
-and must never receive this switch. The diagnostic launcher checks both binary
-hashes; this switch is not enabled by the regular game card.
+The tested patch now lives at `../0006-aoe2-selected-nonreturning-softfault.patch`
+and is built into the common sidecar. The regular AoE II profile enables
+`AOELAB_AOE2_SELECTION_JUMP=1` only with matching native/PE Wine capabilities and
+a matching sidecar SHA-256 marker. The bridge removes this flag when the game
+EXE hash differs. AoE IV and generic x87 launches retain their existing path.
 
 The existing decoder represents an invalid opcode as a CALL into Wine. A
 synthetic test demonstrated that Rosetta translates unreachable x87 bytes at

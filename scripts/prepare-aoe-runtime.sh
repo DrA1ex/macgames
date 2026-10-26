@@ -11,9 +11,10 @@ printf '%s  %s\n' "$EXPECTED" "$ARCHIVE" | shasum -a 256 --check --status || {
 command -v cmake >/dev/null || { echo "Install CMake (brew install cmake)." >&2; exit 1; }
 WORK="$ROOT/build/aoe-runtime"
 mkdir -p "$WORK"
-KEY="$( { shasum -a 256 "$ARCHIVE" "$ROOT"/patches/x87sidecar/*.patch "$0"; xcrun clang++ --version; } | shasum -a 256 | cut -d' ' -f1)"
+KEY="$( { shasum -a 256 "$ARCHIVE" "$ROOT"/patches/x87sidecar/*.patch "$ROOT/scripts/prepare-aoe-runtime.sh"; xcrun clang++ --version; } | shasum -a 256 | cut -d' ' -f1)"
 if [ -f "$WORK/source-key" ] && [ "$(cat "$WORK/source-key")" = "$KEY" ] \
    && [ -s "$WORK/sidecar-source-patched.tar.gz" ] \
+   && [ -s "$WORK/aoe2-selection-jump" ] \
    && codesign --verify --strict "$WORK/x87sidecar" 2>/dev/null; then
   printf '%s\n' "$WORK/x87sidecar"
   exit 0
@@ -31,5 +32,6 @@ cp "$STAGE/build/bin/x87sidecar" "$WORK/x87sidecar.new"
 mv "$WORK/x87sidecar.new" "$WORK/x87sidecar"
 # Preserve corresponding patched sources next to the artifact for redistribution.
 tar -czf "$WORK/sidecar-source-patched.tar.gz" -C "$STAGE" x87sidecar
+printf '1\n%s\n' "$(shasum -a 256 "$WORK/x87sidecar" | cut -d' ' -f1)" > "$WORK/aoe2-selection-jump"
 printf '%s\n' "$KEY" > "$WORK/source-key"
 printf '%s\n' "$WORK/x87sidecar"

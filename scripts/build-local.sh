@@ -45,6 +45,10 @@ if [ -f "$VENDOR/SHA256SUMS" ]; then
 else
   ditto "$SOURCE_APP/Contents/Resources/Runtime" "$BUNDLE/Contents/Resources/Runtime"
 fi
+AOE2_OVERLAY="$(python3 "$ROOT/scripts/prepare-aoe2-runtime.py")"
+ditto "$AOE2_OVERLAY" "$BUNDLE/Contents/Resources/Runtime/Overlays/aoe2-selection"
+mkdir -p "$BUNDLE/Contents/Resources/Runtime/Sources"
+cp "$ROOT/build/aoe2-runtime/wine-aoe2-source-patched.tar.gz" "$BUNDLE/Contents/Resources/Runtime/Sources/"
 for asset in AppIcon.icns Assets.car; do
   if [ -f "$SOURCE_APP/Contents/Resources/$asset" ]; then
     cp "$SOURCE_APP/Contents/Resources/$asset" "$BUNDLE/Contents/Resources/"
@@ -55,6 +59,12 @@ if [ -z "$SIDECAR" ]; then SIDECAR="$("$ROOT/scripts/prepare-aoe-runtime.sh")"; 
 codesign --verify --strict "$SIDECAR"
 ditto "$SIDECAR" "$BUNDLE/Contents/Helpers/x87sidecar"
 printf '2\n' > "$BUNDLE/Contents/Resources/Runtime/aoe-performance-v2"
+if [ -f "$ROOT/build/aoe-runtime/aoe2-selection-jump" ] && \
+   [ "$(tail -n1 "$ROOT/build/aoe-runtime/aoe2-selection-jump")" = "$(shasum -a 256 "$SIDECAR" | cut -d' ' -f1)" ]; then
+  cp "$ROOT/build/aoe-runtime/aoe2-selection-jump" "$BUNDLE/Contents/Resources/Runtime/"
+else
+  rm -f "$BUNDLE/Contents/Resources/Runtime/aoe2-selection-jump"
+fi
 if [ -f "$ROOT/build/aoe-runtime/sidecar-source-patched.tar.gz" ]; then
   mkdir -p "$BUNDLE/Contents/Resources/Runtime/Sources"
   cp "$ROOT/build/aoe-runtime/sidecar-source-patched.tar.gz" "$BUNDLE/Contents/Resources/Runtime/Sources/"
