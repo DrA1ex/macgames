@@ -21,7 +21,7 @@ The inherited catalog contains more game profiles, but the modified local-launch
 
 The earlier Steam/Battle.net-compatible proposal was merged as [upstream PR #5](https://github.com/tarikbc/macgames/pull/5) and shipped in [0.1.3](https://github.com/tarikbc/macgames/releases/tag/v0.1.3). Upstream tested the final head through Steam and notarized the rebuilt sidecar. Its shared environment HiDPI setting, fixed-on Overwatch mode and ordinary registry recipe updates are retained here.
 
-This fork keeps its local-EXE interface. A separate AoE II Steam branch is prepared from current upstream, without the fork-specific UI and diagnostics.
+This fork keeps its local-EXE interface. The separate [AoE II Steam contribution branch](https://github.com/DrA1ex/macgames/tree/feat/aoe2-steam) starts from upstream 0.1.3, without the fork-specific UI and diagnostics. It uses App ID 813780 and the existing shared Steam environment. No pull request has been opened; actual Steam gameplay still needs validation.
 
 ## Install the fork build
 
@@ -67,6 +67,7 @@ Each working sidecar patch has its own commit. Integration, HiDPI, local-launch 
 
 - Upstream-compatible branch: **285 tests / 73 suites**, plus full Xcode/Steam/Sparkle app build.
 - Fork main: **323 tests / 81 suites**, plus the complete local app and source-patched helper build.
+- Separate AoE II Steam branch: **297 tests / 74 suites**, a complete Release build, and synthetic Wine → bridge → sidecar child-process checks. This does not replace actual Steam gameplay testing.
 - Game observations: an M5 Pro / macOS 26.5.2 local AoE IV save improved from an initial user-reported 20-25 FPS to 55-58 FPS after the working combination and crash fixes. These are single-machine observations, not a controlled cross-platform benchmark or a promise.
 - AoE II: the user reproduced selection stutter in «ПЕРФ», confirmed that the cache restored unselected-level smoothness, then repeated the test successfully through the ordinary runner with automatic installation/connection. Both functions passed without reported cache errors or body mismatches.
 - Matched 3840x2160 windowed comparison: installed app **24.91 ms GPU / 39.70 FPS**; control without extra diagnostics **24.88 ms / 39.34 FPS**. Extra instrumentation had confounded earlier comparisons. Actual render size and scene state must match.
