@@ -135,6 +135,7 @@ extension GameRuntime {
         }
         try startDetached(arguments, environment: env, workingDirectory: paths.workingDirectory,
                           log: paths.localLog.lastPathComponent, executable: useSidecar ? runtime.bridge : nil)
+        startAoE2FunctionCache(environment: env)
         if fitCS2 { try? fm.removeItem(at: cs2DisplayPending) }
     }
 

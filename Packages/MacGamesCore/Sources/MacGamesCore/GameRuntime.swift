@@ -118,6 +118,11 @@ public final class GameRuntime: @unchecked Sendable {
                let actual = try? sha256Hex(ofFileAt: native), actual == fields[1] {
                 env["AOELAB_CODE_CACHE_GAME"] = "1"
                 env["AOELAB_CODE_CACHE_AOE2"] = "1"
+                if AoE2FunctionCache.verified(in: paths) != nil {
+                    env["AOELAB_AOE2_FUNCTION_CACHE_PERSIST"] = "1"
+                    env["AOELAB_AOE2_FUNCTION_CACHE_STATUS"] = paths.windowsPath(
+                        driveC.appendingPathComponent("macgames/aoe2-cache-\(UUID().uuidString).bin"))
+                }
             }
         }
         env["MACGAMES_HIDPI"] = environmentSettings.hiDPI ? "1" : "0"

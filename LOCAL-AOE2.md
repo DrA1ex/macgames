@@ -60,4 +60,16 @@ env MallocProbGuard=1 MacGames --command play --game aoe2
 
 Keep this scoped to the AoE II process. It enables a process-wide diagnostic malloc wrapper as well as caulk's alternative audio resource, so gameplay performance still needs validation. It is not enabled by the ordinary game card in this source revision.
 
-The next investigation is a bounded handler-cost capture after loading the reproduction save. The observer should be attached after loading, and chain and per-handler times must not be added together because they overlap. The existing observer context checks passed 46,000 exception deliveries (92,000 handler/chain observation events), with no lost records or observer errors. This capture has not yet been taken in the failing gameplay scene.
+The bounded handler capture after loading the reproduction save measured roughly 6,713 calls/s at each of the four selection PCs and 14.8–15.9 microseconds per original handler call. Chain and handler times overlap and must not be added. Main-thread samples repeatedly found rewriting of the same two function bodies. A direct-store replacement for Wine MOVS did not improve a corrected executable-code benchmark and was rejected.
+
+## Selection-function cache
+
+The separate [function-cache source and preparation instructions](patches/wine/experimental/aoe2-function-cache/README.md) preserve immutable copies of both decoded functions. The first version retained every original entry/exit handler and improved the user's selected Frame Interval from 25–30 ms to an unstable 18–20 ms, compared with about 10 ms unselected.
+
+The next version enters a cached RET copy directly, with original-handler revalidation every 1024 entries. Normal handler fallbacks still use their matching original exit, so entry/exit accounting stays balanced. Microsoft FH4 cleanup, relocation, context preservation, live disable and changed-body fallback checks passed. The user then reported the same smoothness with and without selection in «ПЕРФ».
+
+In a same-process 20-second selected-group comparison, raw HUD interval median/p95 fell from 24.69/50.00 to 16.67/18.93 ms; main-thread CPU fell from 72.35% to 46.59% of one core. Raw histories contain duplicate points, so these are not unique-frame FPS counts. The initial window recorded about 447000 hits per function with no errors or body mismatches; the longer trial exceeded 13.9 million hits per function without errors. This is a successful reproduction test; longer sessions and other saves remain to be tested.
+
+MacGames can connect this cache automatically on a separately prepared engine when both existing optimization switches are on. A capability file pins native Wine, engine/prefix PE ntdll, cache DLL and loader hashes. MacGames, the loader and the DLL independently retain the exact-game hash gate. A normal packaged engine has no capability file and does not load this DLL. The persistent helper has no 15-minute limit. The earlier private temporary probe is distinct.
+
+One evening launch remained in the load menu and showed black after a second load click, before any new function-cache DLL was loaded. Restarting the unchanged runtime allowed the same save to load. That incident is unresolved and should not be attributed to the then-unloaded candidate.

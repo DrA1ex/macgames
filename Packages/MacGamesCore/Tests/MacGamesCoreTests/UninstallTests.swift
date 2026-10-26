@@ -89,7 +89,7 @@ import Testing
         try write("exe", to: p.gameExe)
         try write(Self.systemReg, to: p.prefix.appendingPathComponent("system.reg"))
         try env.runtime.uninstall()
-        #expect(env.calls.contains(#"wine C:\ProgramData\Battle.net\Agent\Blizzard Uninstaller.exe --lang=enUS --uid=fenris --displayname=Diablo IV"#))
+        #expect(env.waitForCall(containing: #"wine C:\ProgramData\Battle.net\Agent\Blizzard Uninstaller.exe --lang=enUS --uid=fenris --displayname=Diablo IV"#))
     }
 
     @Test func removingAnEnvironmentNeedsAllItsGamesUninstalled() throws {

@@ -40,6 +40,7 @@ import Testing
         let cached = try game.launchEnvironment()
         #expect(cached["AOELAB_CODE_CACHE_GAME"] == "1")
         #expect(cached["AOELAB_CODE_CACHE_AOE2"] == "1")
+        #expect(cached["AOELAB_AOE2_FUNCTION_CACHE_PERSIST"] == nil, "native ring capability alone cannot load an extra DLL")
         game.performanceDirectory = game.paths.root.appendingPathComponent("aoe2-recording")
         let recording = try game.launchEnvironment()
         #expect(recording["AOELAB_COUNTERS_DIR"] == game.performanceDirectory?.path)
@@ -61,7 +62,8 @@ import Testing
                    "AOELAB_SOFTFAULT_BRIDGE": "1", "AOE_SOFTFAULT_PC": "0x140001000",
                    "AOE_SOFTFAULT_END": "0x143197790", "AOE_SOFTFAULT_TARGET": "0x180000010",
                    "AOE_SOFTFAULT_TARGET1": "0x180000000", "X87_ALWAYS_NONE": "1",
-                   "AOELAB_CODE_CACHE_GAME": "1", "AOELAB_CODE_CACHE_AOE2": "1"]
+                   "AOELAB_CODE_CACHE_GAME": "1", "AOELAB_CODE_CACHE_AOE2": "1",
+                   "AOELAB_AOE2_FUNCTION_CACHE_PERSIST": "1", "AOELAB_AOE2_FUNCTION_CACHE_STATUS": "C:\\cache.bin"]
         for hash in [GameProfile.aoe2.optimizedExecutableSHA256!, "changed-build"] {
             let decision = Bridge.decide(arguments: args, environment: env, cwd: "/", isExecutable: { _ in true }) { _ in hash }
             guard case let .exec(path, _, unset) = decision else { Issue.record("Expected sidecar"); return }
@@ -72,4 +74,33 @@ import Testing
             }
         }
     }
+    @Test func selectionCacheRequiresMatchingEnginePrefixAndHelpers() throws {
+        let fixture = try FakeEnvironment(.aoe2, localLaunch: true); defer { fixture.cleanUp() }
+        let paths = fixture.runtime.paths
+        let folder = paths.engine.appendingPathComponent("aoe2-function-cache")
+        let native = paths.engine.appendingPathComponent("lib/wine/x86_64-unix/ntdll.so")
+        let pe = paths.engine.appendingPathComponent("lib/wine/x86_64-windows/ntdll.dll")
+        let prefixPE = paths.prefix.appendingPathComponent("drive_c/windows/system32/ntdll.dll")
+        let dll = folder.appendingPathComponent("cache.dll"), loader = folder.appendingPathComponent("loader.exe")
+        try write("native", to: native); try write("observer-pe", to: pe); try write("observer-pe", to: prefixPE)
+        try write("selection-dll", to: dll); try write("selection-loader", to: loader)
+        #expect(AoE2FunctionCache.verified(in: paths) == nil)
+        let capability = AoE2FunctionCache.Capability(version: 1, nativeSHA256: try sha256Hex(ofFileAt: native),
+            peSHA256: try sha256Hex(ofFileAt: pe), dllSHA256: try sha256Hex(ofFileAt: dll),
+            loaderSHA256: try sha256Hex(ofFileAt: loader))
+        let marker = folder.appendingPathComponent("capability.json")
+        try JSONEncoder().encode(capability).write(to: marker)
+        #expect(AoE2FunctionCache.verified(in: paths) != nil)
+        for file in [native, pe, prefixPE, dll, loader] {
+            let original = try Data(contentsOf: file)
+            try write("replacement", to: file)
+            #expect(AoE2FunctionCache.verified(in: paths) == nil)
+            try original.write(to: file)
+        }
+        // Even a matching helper set cannot make a changed game receive the DLL.
+        try write("MZ different game", to: paths.gameExe)
+        fixture.runtime.startAoE2FunctionCache(environment: ["AOELAB_AOE2_FUNCTION_CACHE_PERSIST": "1"])
+        #expect(!fixture.calls.contains { $0.contains("loader.exe") })
+    }
+
 }
