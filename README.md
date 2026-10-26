@@ -2,6 +2,10 @@
 
 **This is [DrA1ex/macgames](https://github.com/DrA1ex/macgames), a fork of [tarikbc/macgames](https://github.com/tarikbc/macgames).** It focuses on launching already-installed Windows games on Apple Silicon, tested AoE II/AoE IV Rosetta improvements, and an explicit HiDPI switch. It is an independent development fork; upstream downloads do not include these changes.
 
+**[Download the fork DMG — v0.1.3-fork.1](https://github.com/DrA1ex/macgames/releases/tag/v0.1.3-fork.1)**
+
+The ready-to-use build includes the AoE II selection-stutter fix, shared game environments and bundled AoE II artwork. It is an experimental, locally signed build and is **not Apple-notarized**. It uses the local-EXE interface below; the separate Steam contribution branch is not this release.
+
 ## What this fork adds
 
 - **Choose an installed EXE and play.** The local app uses the selected game files in place, with the same shared environment groups as upstream. It does not install or start Steam/Battle.net in this UI. A custom working folder is optional.
@@ -18,6 +22,12 @@ The inherited catalog contains more game profiles, but the modified local-launch
 The earlier Steam/Battle.net-compatible proposal was merged as [upstream PR #5](https://github.com/tarikbc/macgames/pull/5) and shipped in [0.1.3](https://github.com/tarikbc/macgames/releases/tag/v0.1.3). Upstream tested the final head through Steam and notarized the rebuilt sidecar. Its shared environment HiDPI setting, fixed-on Overwatch mode and ordinary registry recipe updates are retained here.
 
 This fork keeps its local-EXE interface. A separate AoE II Steam branch is prepared from current upstream, without the fork-specific UI and diagnostics.
+
+## Install the fork build
+
+Download `MacGames-Fork-v0.1.3-fork.1.dmg` from the fork release, open it, and drag **MacGames.app** into **Applications**. Select the game's card, choose your installed Windows EXE and press **Play**. AoE II and the other compatible Steam-library profiles share `~/Library/Application Support/macgames/steam`; settings and caches remain per game. Special environment groups follow upstream's layout. The app prepares missing runtime dependencies on first launch.
+
+For AoE II, enable **Rosetta optimization** and **Exception handling** to use the tested cache path. The fixed-address optimizations apply only to the supported EXE hash; other builds retain the guarded fallback. Game files and saves are not distributed in the DMG.
 
 ## Build and use
 
@@ -72,6 +82,6 @@ Local ad-hoc signatures change after rebuilding. macOS may request folder access
 
 ## Upstream and licenses
 
-Original project: [tarikbc/macgames](https://github.com/tarikbc/macgames), [website](https://macgames.app/), [upstream releases](https://github.com/tarikbc/macgames/releases). Those releases are upstream builds, not releases of this fork. This fork currently provides source and a local build workflow.
+Original project: [tarikbc/macgames](https://github.com/tarikbc/macgames), [website](https://macgames.app/), [upstream releases](https://github.com/tarikbc/macgames/releases). Those releases are upstream builds, not releases of this fork. This fork provides source, a local build workflow and an experimental DMG release.
 
 MacGames retains its [PolyForm Noncommercial 1.0.0 license and required notice](LICENSE). MIT x87sidecar/HDE and LGPL Wine retain their own notices in [LICENSES](LICENSES/). New sidecar/Wine modifications retain their respective component licenses; this fork does not relicense third-party components.
