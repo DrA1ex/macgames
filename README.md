@@ -2,9 +2,11 @@
 
 **This is [DrA1ex/macgames](https://github.com/DrA1ex/macgames), a fork of [tarikbc/macgames](https://github.com/tarikbc/macgames).** It focuses on launching already-installed Windows games on Apple Silicon, tested AoE II/AoE IV Rosetta improvements, and an explicit HiDPI switch. It is an independent development fork; upstream downloads do not include these changes.
 
-**[Download the fork DMG — v0.1.3-fork.1](https://github.com/DrA1ex/macgames/releases/tag/v0.1.3-fork.1)**
+**[Download the fork DMG — v0.1.3-fork.2](https://github.com/DrA1ex/macgames/releases/tag/v0.1.3-fork.2)**
 
 The ready-to-use build includes the AoE II selection-stutter fix, shared game environments and bundled AoE II artwork. It is an experimental, locally signed build and is **not Apple-notarized**. It uses the local-EXE interface below; the separate Steam contribution branch is not this release.
+
+`fork.2` fixes an x87sidecar register-allocation abort seen when selecting a unit after playing for a while. GS/RIP memory operands now use the same whole-block Rosetta fallback as ordinary GS/TLS operands. The selection-function cache remains enabled. A standalone reproducer failed on `fork.1` and passes on this build; extended gameplay after this fix still needs validation.
 
 ## What this fork adds
 
@@ -25,7 +27,7 @@ This fork keeps its local-EXE interface. The separate [AoE II Steam contribution
 
 ## Install the fork build
 
-Download `MacGames-Fork-v0.1.3-fork.1.dmg` from the fork release, open it, and drag **MacGames.app** into **Applications**. Select the game's card, choose your installed Windows EXE and press **Play**. AoE II and the other compatible Steam-library profiles share `~/Library/Application Support/macgames/steam`; settings and caches remain per game. Special environment groups follow upstream's layout. The app prepares missing runtime dependencies on first launch.
+Download `MacGames-Fork-v0.1.3-fork.2.dmg` from the fork release, open it, and drag **MacGames.app** into **Applications**. Select the game's card, choose your installed Windows EXE and press **Play**. AoE II and the other compatible Steam-library profiles share `~/Library/Application Support/macgames/steam`; settings and caches remain per game. Special environment groups follow upstream's layout. The app prepares missing runtime dependencies on first launch.
 
 For AoE II, enable **Rosetta optimization** and **Exception handling** to use the tested cache path. The fixed-address optimizations apply only to the supported EXE hash; other builds retain the guarded fallback. Game files and saves are not distributed in the DMG.
 
@@ -41,7 +43,7 @@ scripts/build-local.sh
 open "build/MacGames Local.app"
 ```
 
-The first command that fetches the runtime downloads upstream runtime4 and checks its SHA-256. The sidecar build applies `patches/x87sidecar/0001` through `0006` to the source archive and retains corresponding patched sources. The AoE II builder also prepares a separate native/PE Wine overlay and cache helper from pinned sources; see [patch provenance and build details](patches/README.md). CMake can be installed with `brew install cmake` if absent. The local app has upstream automatic updates disabled so an upstream release cannot silently replace the fork.
+The first command that fetches the runtime downloads upstream runtime4 and checks its SHA-256. The sidecar build applies `patches/x87sidecar/0001` through `0007` to the source archive and retains corresponding patched sources. The AoE II builder also prepares a separate native/PE Wine overlay and cache helper from pinned sources; see [patch provenance and build details](patches/README.md). CMake can be installed with `brew install cmake` if absent. The local app has upstream automatic updates disabled so an upstream release cannot silently replace the fork.
 
 In the app, choose the matching profile, choose its installed EXE, then Play. Settings include **Rosetta optimization**, **HiDPI (Retina)** and the optional performance HUD. Environment groups match upstream: most games share `~/Library/Application Support/macgames/steam/`, while Skyrim, Overwatch and other special groups keep their own environments. Per-game selections, settings and caches stay under `games/<game-id>/`; game files stay in their chosen folder. See [LOCAL-AOE4.md](LOCAL-AOE4.md) for the local workflow and CLI.
 

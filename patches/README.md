@@ -28,6 +28,10 @@ The runtime source archive does not carry a trustworthy x87 Git commit identifie
 
 5. `x87sidecar/0005-reduce-logarithm-register-pressure.patch`: fork-only fix for the captured FYL2XP1 abort in `emit_inline_log2`. Reuses dead/output registers to reduce the log core to five internal FPRs (seven including operands), preserving the arithmetic graph. FYL2X/FYL2XP1 decline to stock before emission when fewer than seven are available; a mid-run decline flushes deferred state. Native pressure tests cover all single-missing-register positions, low-pool fallback and mid-run flushing.
 
+7. `x87sidecar/0007-fallback-all-gs-address-forms.patch`: follow-up to 0002 for the `alloc_gpr: pool slot already occupied` crash during AoE II unit selection. Rosetta decodes GS/RIP-relative loads as `AbsMem`, which the original `MemRef`-only guard missed. Fused FILD/FLD1/FUCOMPP can allocate X29 for an address temporary before the TLS routine reserves it. The whole-block guard now covers `MemRef`, `AbsMem` and fixup-backed `Immediate` address forms. The allocator assertion remains active.
+
+`WindowsHelpers/fixtures/x87-gs-rip.c` is an independent Windows reproducer without game bytes. Compile with `x86_64-w64-mingw32-gcc -O2 WindowsHelpers/fixtures/x87-gs-rip.c -o x87-gs-rip.exe` and run cases 0–3 through `x87sidecar --cooperative wine x87-gs-rip.exe N`. The old helper aborts on case 2; the new helper matches stock comparison results for FILD m16/m32/m64 and FLD m64, with both default settings and `X87_DISABLE_X87_IR=1`. The existing AoE II JMP and 46,000-delivery context checks also pass. Longer gameplay remains to be tested.
+
 ## Reproduce the working helper
 
 ```sh
