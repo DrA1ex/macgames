@@ -1,0 +1,23 @@
+# Original changes to x87sidecar; provided under its MIT license.
+# Baseline: https://github.com/tarikbc/macgames/releases/tag/runtime-4
+# Translator origin: https://github.com/athei/x87sidecar
+# sidecar-source.tar.gz SHA-256: 50ad26b802a590b7c49a121da35ca632bc2676b2fcde40b663805e612d547ff0
+# Follow-up to 0002: GS/RIP FILD + FLD1 + FUCOMPP reproduces the X29 abort.
+
+--- a/rosetta_loader/src/sidecar.cpp
++++ b/rosetta_loader/src/sidecar.cpp
+@@ -2464,7 +2464,13 @@
+         const auto& insn = localIR[i];
+         for (unsigned operand = 0; operand < std::min<unsigned>(insn.num_operands, 4); ++operand) {
+             const auto& op = insn.operands[operand];
+-            if (op.mem.kind == IROperandKind::MemRef && op.mem.seg_override == 2) {
++            // Rosetta represents RIP-relative memory as AbsMem (and fixup-backed
++            // addresses as Immediate). All three feed compute_operand_address,
++            // which reads the shared segment byte before dispatching on kind.
++            const bool address = op.kind == IROperandKind::MemRef ||
++                                 op.kind == IROperandKind::AbsMem ||
++                                 op.kind == IROperandKind::Immediate;
++            if (address && op.mem.seg_override == 2) {
+                 stock_hash_hit = true;
+                 static unsigned gs_fallbacks = 0;
+                 if (++gs_fallbacks <= 5) {
